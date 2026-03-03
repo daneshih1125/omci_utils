@@ -111,6 +111,19 @@ class OMCIPacket:
         return cls(full_raw)
 
     @property
+    def is_request(self):
+        if self.is_response:
+            return False
+
+        no_result_actions = {
+            OmciAction.MIB_UPLOAD,
+            OmciAction.MIB_UPLOAD_NEXT,
+            OmciAction.GET_ALL_ALARMS,
+            OmciAction.GET_ALL_ALARMS_NEXT
+        }
+        return self.action not in no_result_actions
+
+    @property
     def has_result_code(self):
         if not self.is_response:
             return False

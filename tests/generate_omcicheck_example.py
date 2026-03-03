@@ -6,6 +6,7 @@
 
 import sys
 import os
+import time
 from scapy.all import wrpcap, Ether, Raw
 
 # Ensure project modules can be imported
@@ -132,6 +133,32 @@ def main():
     # ONU responds with UNKNOWN_ME (4) error
     pkts.append(create_omci(tid, 0x28, 241, 1, content=bytes([OmciResult.UNKNOWN_ME] + [0]*27), is_from_olt=False))
     tid += 1
+
+    # Test case (LATE) ---
+    curr_time = time.time()
+    curr_time += 1.0
+    req = create_omci(tid, OmciAction.GET, 257, 0, is_from_olt=True)
+    req.time = curr_time
+    pkts.append(req)
+
+    resp = create_omci(tid, 0x29, 257, 0, content=bytes([OmciResult.SUCCESS] + [0]*27), is_from_olt=False)
+    resp.time = curr_time + 1.2
+    pkts.append(resp)
+    tid += 1
+
+    # --- Test case (TID_DUPLICATE)
+    curr_time = time.time()
+    req1 = create_omci(tid, OmciAction.GET, 257, 0, is_from_olt=True)
+    req1.time = curr_time
+    pkts.append(req1)
+
+    req2 = create_omci(tid, OmciAction.GET, 257, 0, is_from_olt=True)
+    req2.time = curr_time + 0.1
+    pkts.append(req2)
+
+    resp = create_omci(tid, 0x29, 257, 0, content=bytes([OmciResult.SUCCESS] + [0]*27), is_from_olt=False)
+    resp.time = curr_time + 0.2
+    pkts.append(resp)
 
     # Save to file
     output_file = "omcicheck_example.pcap"

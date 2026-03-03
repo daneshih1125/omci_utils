@@ -16,26 +16,29 @@ import json
 def is_baseline(pkt):
     return isinstance(pkt, OMCIBaseline)
 
-def run_omcicheck(pcap_path, only_vendor=False, only_failed=False):
+def run_omcicheck(pcap_path, only_vendor=False, only_failed=False, rtt_threshold=1000):
     print(f"Analyzing: {pcap_path}\n")
-    header = f"{'No.':<6} {'ID':<8} {'Action':<18} {'ME Class':<12} {'ME Instance':<12} {'Result':<30} {'ME desc':<40}"
+    header = f"{'No.':<6} {'ID':<8} {'Action':<18} {'ME Class':<12} {'ME Instance':<12} {'Result':<30} {'RTT':<12} {'Status':<16} {'ME desc':<40}"
     print(header)
     print("-" * 120)
 
     try:
-        pkts = rdpcap(pcap_path)
+        raw_pkts = rdpcap(pcap_path)
     except Exception as e:
         print(f"Error reading pcap: {e}")
         return
 
     count_fail = 0
     count_vendor = 0
+    count_duplicate = 0
+    count_late = 0
+    request_timestamps = {}
 
-    for i, pkt in enumerate(pkts):
+    for i, raw_pkt in enumerate(raw_pkts):
         # Skip non-OMCI packets
-        if not pkt.haslayer('Ether') or pkt.getlayer('Ether').type != 0x88b5:
+        if not raw_pkt.haslayer('Ether') or raw_pkt.getlayer('Ether').type != 0x88b5:
             continue
-        raw_data = bytes(pkt.lastlayer())
+        raw_data = bytes(raw_pkt.lastlayer())
         try:
             pkt = OMCIPacket.from_raw(raw_data)
         except Exception:
@@ -47,10 +50,22 @@ def run_omcicheck(pcap_path, only_vendor=False, only_failed=False):
 
         is_fail = False
         is_vendor = False
+        is_duplicate = False
+        is_late = False
         action_name = ""
         me_display = ""
         inst_display = ""
-        res_text = "Success"
+        res_text = ""
+        rtt = 0
+        status = ""
+
+        # rtt
+        if pkt.is_request:
+            if pkt.transaction_id in request_timestamps:
+                status = "[TID_DUPLOCATE]"
+                count_duplicate += 1
+                is_duplicate = True
+            request_timestamps[pkt.transaction_id] = raw_pkt.time
 
         # Display Non-standard MEs reported by ONU during MIB Upload.
         mib_entity = pkt.mib_upload_entity
@@ -74,6 +89,14 @@ def run_omcicheck(pcap_path, only_vendor=False, only_failed=False):
             else:
                 res_text = "Success"
 
+            if pkt.transaction_id in request_timestamps:
+                rtt = raw_pkt.time - request_timestamps[pkt.transaction_id]
+                if rtt * 1000 > rtt_threshold:
+                    is_late = True
+                    count_late += 1
+                    status = "[LATE]"
+
+
         if pkt.is_vendor_me or pkt.is_feature_me or pkt.mib_upload_is_vendor or pkt.mib_upload_is_feature:
             is_vendor = True
             count_vendor += 1
@@ -85,16 +108,16 @@ def run_omcicheck(pcap_path, only_vendor=False, only_failed=False):
 
         me_desc = omcimib.get_me_name(me_class)
 
-        if is_fail or is_vendor:
+        if is_fail or is_vendor or is_duplicate or is_late:
             color = "\033[91m" if is_fail else "\033[93m"
             reset = "\033[0m"
             action_name = pkt.action.name if hasattr(pkt.action, 'name') else f"Action({pkt.action})"
             inst_str = f"0x{me_inst:04x}"
-            print(f"{color}{i+1:<6} {pkt.transaction_id:<8} {action_name:<18} {me_class:<12} {inst_str:<12} {res_text:<30} {me_desc:<40}{reset}")
+            print(f"{color}{i+1:<6} {pkt.transaction_id:<8} {action_name:<18} {me_class:<12} {inst_str:<12} {res_text:<30} {rtt:<12} {status:<16} {me_desc:<40}{reset}")
 
     print("-" * 120)
 
-    print(f"Summary: Found {count_fail} failures, Found {count_vendor} Vendor packets")
+    print(f"Summary: Found {count_fail} failures, {count_vendor} Vendor packets, {count_duplicate} duplicate packets, {count_late} late packets")
 
 def load_mib_json(json_path):
     """
@@ -208,9 +231,15 @@ def main():
         parser.add_argument("pcap", help="Path to pcap file")
         parser.add_argument("--only-vendor", action="store_true")
         parser.add_argument("--only-failed", action="store_true")
+        parser.add_argument(
+            "--rtt-threshold",
+            type=float,
+            default=1000.0,
+            help="RTT threshold in milliseconds to flag slow responses (default: 1000ms)"
+        )
 
         args = parser.parse_args()
-        run_omcicheck(args.pcap, only_vendor=args.only_vendor, only_failed=args.only_failed)
+        run_omcicheck(args.pcap, only_vendor=args.only_vendor, only_failed=args.only_failed, rtt_threshold=args.rtt_threshold)
     elif prog_name == "omcidiff":
         parser = argparse.ArgumentParser(description="OMCI MIB Diff Tool")
         parser.add_argument("pcap1", help="Path to the first pcap file (Baseline)")
