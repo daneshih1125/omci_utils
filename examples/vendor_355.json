@@ -1,6 +1,6 @@
 {
   "355": ["HWTC 355 ME", [
-    ["CPE mode", 3, "str"],
-    ["Support VOIP", 1, "u8"]
+    ["CPE mode", 3, "str", false],
+    ["Support VOIP", 1, "u8", false]
   ]]
 }

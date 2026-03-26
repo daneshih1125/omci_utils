@@ -14,6 +14,7 @@ dependencies = [
 [project.scripts]
 omcicheck = "omci.cli:main"
 omcidiff = "omci.cli:main"
+omcigraphic = "omci.cli:main"
 
 [tool.setuptools.dynamic]
 version = {attr = "omci.__version__"}

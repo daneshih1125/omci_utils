@@ -10,6 +10,8 @@ import os
 from scapy.all import rdpcap
 from omci.omci import OMCIBaseline, OMCIPacket, OmciResult, OmciAction
 from  omci import omcimib
+from  omci.omcimib import OMCIClass
+from  omci import omcigrapher
 import argparse
 import json
 
@@ -40,12 +42,12 @@ def run_omcicheck(pcap_path, only_vendor=False, only_failed=False, rtt_threshold
             continue
         raw_data = bytes(raw_pkt.lastlayer())
         try:
-            pkt = OMCIPacket.from_raw(raw_data)
+            omci_pkt = OMCIPacket.from_raw(raw_data)
         except Exception:
             continue
 
         # currently, only support Baseline
-        if not is_baseline(pkt):
+        if not is_baseline(omci_pkt):
             continue
 
         is_fail = False
@@ -60,25 +62,25 @@ def run_omcicheck(pcap_path, only_vendor=False, only_failed=False, rtt_threshold
         status = ""
 
         # rtt
-        if pkt.is_request:
-            if pkt.transaction_id in request_timestamps:
+        if omci_pkt.is_request:
+            if omci_pkt.transaction_id in request_timestamps:
                 status = "[TID_DUPLOCATE]"
                 count_duplicate += 1
                 is_duplicate = True
-            request_timestamps[pkt.transaction_id] = raw_pkt.time
+            request_timestamps[omci_pkt.transaction_id] = raw_pkt.time
 
         # Display Non-standard MEs reported by ONU during MIB Upload.
-        mib_entity = pkt.mib_upload_entity
+        mib_entity = omci_pkt.mib_upload_entity
         if mib_entity:
             me_class = mib_entity["me_class"]
             me_inst = mib_entity["me_instance"]
         else:
-            me_class = pkt.me_class
-            me_inst = pkt.inst_id
+            me_class = omci_pkt.me_class
+            me_inst = omci_pkt.inst_id
 
         # Display non-standard MEs and non-success responses during OLT provisioning.
-        if pkt.result != None:
-            res_val = pkt.result
+        if omci_pkt.result != None:
+            res_val = omci_pkt.result
             if res_val != OmciResult.SUCCESS:
                 is_fail = True
                 count_fail += 1
@@ -89,15 +91,15 @@ def run_omcicheck(pcap_path, only_vendor=False, only_failed=False, rtt_threshold
             else:
                 res_text = "Success"
 
-            if pkt.transaction_id in request_timestamps:
-                rtt = raw_pkt.time - request_timestamps[pkt.transaction_id]
+            if omci_pkt.transaction_id in request_timestamps:
+                rtt = raw_pkt.time - request_timestamps[omci_pkt.transaction_id]
                 if rtt * 1000 > rtt_threshold:
                     is_late = True
                     count_late += 1
                     status = "[LATE]"
 
 
-        if pkt.is_vendor_me or pkt.is_feature_me or pkt.mib_upload_is_vendor or pkt.mib_upload_is_feature:
+        if omci_pkt.is_vendor_me or omci_pkt.is_feature_me or omci_pkt.mib_upload_is_vendor or omci_pkt.mib_upload_is_feature:
             is_vendor = True
             count_vendor += 1
 
@@ -111,9 +113,9 @@ def run_omcicheck(pcap_path, only_vendor=False, only_failed=False, rtt_threshold
         if is_fail or is_vendor or is_duplicate or is_late:
             color = "\033[91m" if is_fail else "\033[93m"
             reset = "\033[0m"
-            action_name = pkt.action.name if hasattr(pkt.action, 'name') else f"Action({pkt.action})"
+            action_name = omci_pkt.action.name if hasattr(omci_pkt.action, 'name') else f"Action({omci_pkt.action})"
             inst_str = f"0x{me_inst:04x}"
-            print(f"{color}{i+1:<6} {pkt.transaction_id:<8} {action_name:<18} {me_class:<12} {inst_str:<12} {res_text:<30} {rtt:<12} {status:<16} {me_desc:<40}{reset}")
+            print(f"{color}{i+1:<6} {omci_pkt.transaction_id:<8} {action_name:<18} {me_class:<12} {inst_str:<12} {res_text:<30} {rtt:<12} {status:<16} {me_desc:<40}{reset}")
 
     print("-" * 120)
 
@@ -150,23 +152,23 @@ def get_mib_snapshot(pcap_path):
             continue
         raw_data = bytes(pkt.lastlayer())
         try:
-            pkt = OMCIPacket.from_raw(raw_data)
+            omci_pkt = OMCIPacket.from_raw(raw_data)
         except Exception:
             continue
 
         # currently, only support Baseline
-        if not is_baseline(pkt):
+        if not is_baseline(omci_pkt):
             continue
 
-        mib_entity = pkt.mib_upload_entity
+        mib_entity = omci_pkt.mib_upload_entity
         if mib_entity:
             me_class = mib_entity["me_class"]
             me_inst = mib_entity["me_instance"]
             attr_mask = mib_entity["attr_mask"]
             attr_data = mib_entity["attr_data"]
             key = (me_class, me_inst)
-
-            snapshot[key] = omcimib.MIBInstance(me_class, me_inst)
+            if key not in snapshot:
+                snapshot[key] = omcimib.MIBInstance(me_class, me_inst)
             snapshot[key].update(attr_mask, attr_data)
 
 
@@ -223,6 +225,73 @@ def run_omcidiff(pcap1, pcap2):
     print("-" * 120)
 
 
+def get_all_mib_db(pcap_path):
+    mib_db = {}  # {(class_id, inst_id): MIBInstance}
+
+    try:
+        pkts = rdpcap(pcap_path)
+    except Exception as e:
+        print(f"Error reading {pcap_path}: {e}")
+        return snapshot
+
+    for i, pkt in enumerate(pkts):
+        # Skip non-OMCI packets
+        if not pkt.haslayer('Ether') or pkt.getlayer('Ether').type != 0x88b5:
+            continue
+        raw_data = bytes(pkt.lastlayer())
+        try:
+            omci_pkt = OMCIPacket.from_raw(raw_data)
+        except Exception:
+            continue
+
+        # currently, only support Baseline
+        if not is_baseline(omci_pkt):
+            continue
+
+        mib_entity = omci_pkt.mib_upload_entity
+        if mib_entity:
+            me_class = mib_entity["me_class"]
+            me_inst = mib_entity["me_instance"]
+            attr_mask = mib_entity["attr_mask"]
+            attr_data = mib_entity["attr_data"]
+            key = (me_class, me_inst)
+
+            if key not in mib_db:
+                mib_db[key] = omcimib.MIBInstance(me_class, me_inst)
+            mib_db[key].update(attr_mask, attr_data)
+            continue
+
+        if not omci_pkt.is_request:
+            continue
+
+        me_class = omci_pkt.me_class
+        me_inst = omci_pkt.inst_id
+        key = (me_class, me_inst)
+        if omci_pkt.action == OmciAction.CREATE:
+            if key not in mib_db:
+                mib_db[key] = omcimib.MIBInstance(me_class, me_inst)
+            mib_db[key].update_from_create(omci_pkt.content)
+        elif omci_pkt.action == OmciAction.SET:
+            if key in mib_db:
+                attr_mask = int.from_bytes(omci_pkt.content[:2], byteorder='big')
+                attr_data = omci_pkt.content[2:]
+                mib_db[key].update(attr_mask, attr_data)
+
+    return mib_db
+
+def get_instances_by_class(mib_db, target_class_id):
+    matched = [inst for k, inst in mib_db.items() if k[0] == target_class_id]
+    matched.sort(key=lambda x: x.inst_id)
+
+    return matched
+
+def run_omcigraph(pcap):
+    print(f"[*] Analyzing MIB from {pcap}...")
+    mib_db = get_all_mib_db(pcap)
+    html_content = omcigrapher.export_to_html(mib_db)
+    with open("output.html", "w", encoding="utf-8") as f:
+        f.write(html_content)
+
 def main():
     prog_name = os.path.basename(sys.argv[0])
 
@@ -251,6 +320,11 @@ def main():
         if args.mib_json:
             load_mib_json(args.mib_json)
         run_omcidiff(args.pcap1, args.pcap2)
+    elif prog_name == "omcigraphic":
+        parser = argparse.ArgumentParser(description="OMCI graphic Tool")
+        parser.add_argument("pcap", help="Path to pcap file")
+        args = parser.parse_args()
+        run_omcigraph(args.pcap)
 
 if __name__ == "__main__":
     main()
