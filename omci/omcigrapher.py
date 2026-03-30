@@ -20,6 +20,7 @@ INTERESTED_CLASSES = {
     OMCIClass.T_CONT,                             # 262
     OMCIClass.GEM_INTERWORKING_TERMINATION_POINT, # 266
     OMCIClass.GEM_PORT_NETWORK_CTP,               # 268
+    OMCIClass.MULTICAST_GEM_INTERWORKING_TERMINATION_POINT # 281
 }
 
 def generate_tooltip(cid, iid, attrs):
@@ -46,6 +47,7 @@ def get_vis_elements(mib_db):
         46: 3,  # Bridge Config
         130: 3, # 802.1p Mapper
         266: 4, # GEM IWTP
+        281: 4, # Multicast GEM IWTP
         268: 5, # GEM Port
         262: 6  # T-CONT
     }
@@ -103,7 +105,7 @@ def get_vis_elements(mib_db):
             # TP Pointer
             tp_ptr = attrs.get("TP pointer")
             if tp_ptr is not None:
-                for t_cid in [11, 130, 134, 329]:
+                for t_cid in [11, 130, 134, 329, 281]:
                     if (t_cid, tp_ptr) in mib_db:
                         edges.append({"from": u_id, "to": add_node(t_cid, tp_ptr), "label": "tp_ptr", "arrows": "to"})
 
