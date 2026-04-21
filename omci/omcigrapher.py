@@ -23,12 +23,52 @@ INTERESTED_CLASSES = {
     OMCIClass.MULTICAST_GEM_INTERWORKING_TERMINATION_POINT # 281
 }
 
+ME_47_TP_TYPE = {
+    1: "Physical path termination point Ethernet UNI",
+    2: "Interworking virtual circuit connection (VCC) termination point",
+    3: "IEEE 802.1p mapper service profile",
+    4: "IP host config data or IPv6 host config data",
+    5: "GEM interworking termination point",
+    6: "Multicast GEM interworking termination point",
+    7: "Physical path termination point xDSL UNI part 1",
+    8: "Physical path termination point VDSL UNI",
+    9: "Ethernet flow termination point",
+    10: "Reserved",
+    11: "Virtual Ethernet interface point",
+    13: "Ethernet in the first mile (EFM) bonding group",
+    12: "Physical path termination point MoCA UNI",
+}
+
+ME_171_ASSOCIATION_TYPE = {
+    0: "MAC bridge port configuration data",
+    1: "IEEE 802.1p mapper service profile",
+    2: "Physical path termination point Ethernet UNI",
+    3: "IP host config data or IPv6 host config data",
+    4: "Physical path termination point xDSL UNI",
+    5: "GEM IW termination point",
+    6: "Multicast GEM IW termination point",
+    7: "Physical path termination point MoCA UNI",
+    8: "Reserved",
+    9: "Ethernet flow termination point",
+    10: "Virtual Ethernet interface point",
+    11: "MPLS pseudowire termination point",
+    12: "EFM bonding group",
+}
+
 def generate_tooltip(cid, iid, attrs):
-    if not attrs: return f"ME {cid} ({iid})"
+    if not attrs:
+        return f"ME {cid} ({iid})"
 
-    lines = [f"{k}: {str(v)[:40]}\n"
-             for k, v in attrs.items()]
+    lines = []
 
+    for k, v in attrs.items():
+        val_str = str(v)
+        if cid == 47 and k == "TP type" and isinstance(v, int):
+            val_str = f"{v} ({ME_47_TP_TYPE.get(v, 'Unknown')})"
+        elif cid == 171 and k == "Association type" and isinstance(v, int):
+            val_str = f"{v} ({ME_171_ASSOCIATION_TYPE.get(v, 'Unknown')})"
+
+        lines.append(f"{k}: {val_str}\n")
     return ''.join(lines)
 
 def get_vis_elements(mib_db):
