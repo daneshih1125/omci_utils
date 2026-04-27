@@ -1,26 +1,32 @@
-# omci_utils
+# omcipcap
 
-`omci_utils` is a professional Python toolkit designed for analyzing and diagnosing **ITU-T G.988 OMCI** (ONT Management and Control Interface) protocols. It streamlines the process of identifying non-standard Managed Entities (MEs) and provisioning failures in GPON/XGS-PON packet captures.
+`omcipcap` is a professional Python toolkit designed for analyzing and diagnosing **ITU-T G.988 OMCI** (ONT Management and Control Interface) protocols. It streamlines the process of identifying non-standard Managed Entities (MEs) and provisioning failures in GPON/XGS-PON packet captures.
 
 
 
 ## Key Features
 
-* **`omcicheck`**: Automatically scans pcap/pcapng files to highlight:
+* **`omcipcap check`**: Automatically scans pcap/pcapng files to highlight:
     * **Vendor-Specific MEs**: Identifies MEs in reserved or proprietary ranges.
     * **Provisioning Failures**: Detects non-success response codes (e.g., `UNKNOWN_ME`, `INSTANCE_EXISTS`).
     * **Intelligent Filtering**: Quickly isolate issues using `--only-vendor` or `--only-failed` flags.
     * **RTT Latency Analysis**: Automatically calculates the time difference between Request and Response. Users can flag slow packets using the --rtt-threshold (default: 1s).
-* `omcidiff`: is a powerful utility for performing Differential Analysis between two MIB snapshots. It is specifically designed to help firmware engineers identify configuration drifts
-    * ***Dynamic ME Extension***: Use the --mib-json flag to dynamically load and overwrite ME definitions. This transforms raw hex data into readable fields without modifying the source code.
-* **`omcigraphic`**: generates an interactive, hierarchical network topology from a MIB snapshot. It is designed to visualize the complex logical relationships between Managed Entities (MEs), helping engineers verify provisioning flows from the UNI/Management side to the ANI/T-CONT side.
+* **`omcipcap diff`**: is a powerful utility for performing Differential Analysis between two MIB snapshots. It is specifically designed to help firmware engineers identify configuration drifts
+    * **Dynamic ME Extension**: Use the --mib-json flag to dynamically load and overwrite ME definitions. This transforms raw hex data into readable fields without modifying the source code.
+* **`omcipcap grapgic`**: generates an interactive, hierarchical network topology from a MIB snapshot. It is designed to visualize the complex logical relationships between Managed Entities (MEs), helping engineers verify provisioning flows from the UNI/Management side to the ANI/T-CONT side.
+* **`omcipcap vlan_tpl`**: Provides a deep-dive analysis of VLAN Tagging Filter Data and VLAN Tagging Operation Configuration Data. It decodes the complex, table-driven logic of OMCI VLAN processing into a human-readable format.
+    * **Logic Reconstruction**: Automatically parses Filter/Treatment bit-fields to visualize how the ONU handles Untagged, Single-tagged, and Double-tagged frames.
+    * **Semantic Mapping**: Translates raw hex values into clear actions (e.g., Insert 1 tag, Modify VID, Discard).
+    * **ME Association**: Links VLAN rules directly to their associated Managed Entities, such as Physical Path Termination Points (PPTP) or MAC Bridge Ports, showing the exact association mode and instance IDs.
+    * **Detailed Bit-Field Breakdown**: Includes a technical view of internal bit-fields (Filter/Treatment/Tags Removed) for senior engineers to verify exact hardware-level logic.
 * **Professional Output**: Features color-coded Terminal output and standardized hex formatting for Instance IDs.
 
 ## Project Structure
 
 ```text
 .
-├── examples                    # pcap and json samples
+├── examples                # pcap and json samples
+│   ├── iphost_graphic.png
 │   ├── mib_after.pcap
 │   ├── mib_before.pcap
 │   ├── mib_omcc_96.pcap
@@ -29,16 +35,20 @@
 │   ├── mib_vendor_v2.pcap
 │   ├── omcicheck_example.pcap
 │   ├── omcicheck_example.png
+│   ├── omcivlan.png
+│   ├── pptp_graphic.png
 │   └── vendor_355.json
-├── LICENSE                     # MIT License
-├── omci                        # Core package
+├── LICENSE                 # MIT License
+├── omci                    # Core package
 │   ├── cli.py
 │   ├── __init__.py
+│   ├── omcigrapher.py
 │   ├── omcimib.py
-│   └── omci.py
-├── pyproject.toml             # Build system & entry points
-├── README.md                  # Project documentation
-└── tests                      # Test suites & pcap generators
+│   ├── omci.py
+│   └── omcivlan.py
+├── pyproject.toml          # Build system & entry points
+├── README.md               # Project documentation 
+└── tests                   # Test suites & pcap generators
     ├── generate_omcicheck_example.py
     ├── generate_omcidiff_example.py
     └── test_omci_exceptions.py
@@ -57,7 +67,7 @@ pip install --upgrade pip
 pip install -e .
 
 # 3. Verify the installation
-omcicheck --help
+omcipcap --help
 ```
 **Option 2: Local Directory Installation (Permanent Use)**
 Use this method to make the tool available across your system without activating a venv.
@@ -74,41 +84,40 @@ source ~/.bashrc
 ```
 
 ## Usage
-### omcicheck
+### omcipcap check
 Analyze a pcap file to display a summary of all OMCI packets:
 ```bash
-omcicheck examples/omcicheck_example.pcap
+omcipcap check examples/omcicheck_example.pcap
 ```
 ![omcicheck output example](examples/omcicheck_example.png)
 
-omcicheck with --rtt-threshold argument
+omcipcap check with --rtt-threshold argument
 ```bash
-$ omcicheck --rtt-threshold=1100 omcicheck_example.pcap
+(venv) $omcipcap check --rtt-threshold=1500 omcicheck_example.pcap 
 Analyzing: omcicheck_example.pcap
 
-No.    ID       Action             ME Class     ME Instance  Result                         RTT          Status           ME desc
+No.    ID       Action             ME Class     ME Instance  Result                         RTT          Status           ME desc                                 
 ------------------------------------------------------------------------------------------------------------------------
 38     19       MIB_UPLOAD_NEXT    241          0x0001                                      0                             Reserved for vendor-specific managed entities
-40     20       MIB_UPLOAD_NEXT    350          0x0001                                      0                             Reserved for vendor-specific use
-52     26       MIB_UPLOAD_NEXT    500          0x000a                                      0                             Reserved for future standardization
-58     29       CREATE             84           0x0001       Err: INSTANCE_EXISTS (7)       0.000033                      VLAN tagging filter data
+40     20       MIB_UPLOAD_NEXT    350          0x0001                                      0                             Reserved for vendor-specific use        
+52     26       MIB_UPLOAD_NEXT    500          0x000a                                      0                             Reserved for future standardization     
+58     29       CREATE             84           0x0001       Err: INSTANCE_EXISTS (7)       0.000033                      VLAN tagging filter data                
 59     30       SET                241          0x0001                                      0                             Reserved for vendor-specific managed entities
 60     30       SET                241          0x0001       Err: UNKNOWN_ME (4)            0.000032                      Reserved for vendor-specific managed entities
-62     31       GET                257          0x0000       Success                        1.200000     [LATE]           ONT2-G
-64     32       GET                257          0x0000                                      0            [TID_DUPLOCATE]  ONT2-G
+64     32       GET                257          0x0000                                      0            [TID_DUPLOCATE]  ONT2-G                                  
 ------------------------------------------------------------------------------------------------------------------------
-Summary: Found 2 failures, 5 Vendor packets, 1 duplicate packets, 1 late packets
-$
+Summary: Found 2 failures, 5 Vendor packets, 1 duplicate packets, 0 late packets
+
 ```
 
-### omcidiff
+### omcipcap diff
  Analyze two pcap files to identify differences in MIB provisioning
 ```bash
 # Standard comparison
-omcidiff examples/mib_vendor_v1.pcap examples/mib_vendor_v2.pcap
+omcipcap diff examples/mib_vendor_v1.pcap examples/mib_vendor_v2.pcap
 
 # Comparison with Custom Vendor ME definitions
-omcidiff examples/mib_vendor_v1.pcap examples/mib_vendor_v2.pcap --mib-json examples/vendor_355.json
+omcipcap diff examples/mib_vendor_v1.pcap examples/mib_vendor_v2.pcap --mib-json examples/vendor_355.json
 ```
 
 Example Output
@@ -136,23 +145,23 @@ To define your own Vendor MEs for the --mib-json flag, use the following structu
 }
 ```
 
-### omcigraphic
+### omcipcap graphic
 ```
-omcigraphic omci.pcap
+omcipcap graphic omci.pcap
 ```
 will generate output.html in current directory
 ![PPTP](examples/pptp_graphic.png)
 ![IPHOST](examples/iphost_graphic.png)
 
-### omcivlan
+### omcipcap vlan_tpl
 ```
-omcivlan omci.pcap
+omcipcap vlan_tpl omci.pcap
 ```
 List All ME 171 instances and detail of VLAN table
 ![omcivlan](examples/omcivlan.png)
 
 
-## Setup omci_utils on Windows Virtual Environment
+## Setup omcipcap on Windows Virtual Environment
 1. Create the Environment
 Open your terminal in the project root directory and run:
 ```PowerShell
@@ -178,19 +187,21 @@ pip install -e .
 
 5. Verify the Tool
 ```PowerShell
-(venv) PS C:\Github\omci_utils> omcicheck .\examples\omcicheck_example.pcap
-Analyzing: .\examples\omcicheck_example.pcap
+(venv) PS C:\Github\omci_utils> omcipcap -h
+usage: omcipcap [-h] {check,diff,graphic,vlan_tpl} ...
 
-No.    ID       Action             ME Class     ME Instance  Result                         ME desc
-------------------------------------------------------------------------------------------------------------------------
-38     19       MIB_UPLOAD_NEXT    241          0x0001       Success                        Reserved for vendor-specific managed entities
-40     20       MIB_UPLOAD_NEXT    350          0x0001       Success                        Reserved for vendor-specific use
-52     26       MIB_UPLOAD_NEXT    500          0x000a       Success                        Reserved for future standardization
-58     29       CREATE             84           0x0001       Err: INSTANCE_EXISTS (7)       VLAN tagging filter
-59     30       SET                241          0x0001       Success                        Reserved for vendor-specific managed entities
-60     30       SET                241          0x0001       Err: UNKNOWN_ME (4)            Reserved for vendor-specific managed entities
-------------------------------------------------------------------------------------------------------------------------
-Summary: Found 2 failures, Found 5 Vendor packets
+OMCI PCAP Diagnostic & Analysis Tool
+
+positional arguments:
+  {check,diff,graphic,vlan_tpl}
+                        Available analysis commands
+    check               Analyze RTT, TID duplicates, and failures
+    diff                Compare MIB snapshots between two pcaps
+    graphic             Generate interactive topology HTML
+    vlan_tpl            Analyze OMCI VLAN tagging logic (Table-driven)
+
+options:
+  -h, --help            show this help message and exit
 ```
 
 ## License & Copyright
