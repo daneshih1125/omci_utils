@@ -13,7 +13,7 @@
     * **RTT Latency Analysis**: Automatically calculates the time difference between Request and Response. Users can flag slow packets using the --rtt-threshold (default: 1s).
 * **`omcipcap diff`**: is a powerful utility for performing Differential Analysis between two MIB snapshots. It is specifically designed to help firmware engineers identify configuration drifts
     * **Dynamic ME Extension**: Use the --mib-json flag to dynamically load and overwrite ME definitions. This transforms raw hex data into readable fields without modifying the source code.
-* **`omcipcap grapgic`**: generates an interactive, hierarchical network topology from a MIB snapshot. It is designed to visualize the complex logical relationships between Managed Entities (MEs), helping engineers verify provisioning flows from the UNI/Management side to the ANI/T-CONT side.
+* **`omcipcap graphic`**: generates an interactive, hierarchical network topology from a MIB snapshot. It is designed to visualize the complex logical relationships between Managed Entities (MEs), helping engineers verify provisioning flows from the UNI/Management side to the ANI/T-CONT side.
 * **`omcipcap vlan_tpl`**: Provides a deep-dive analysis of VLAN Tagging Filter Data and VLAN Tagging Operation Configuration Data. It decodes the complex, table-driven logic of OMCI VLAN processing into a human-readable format.
     * **Logic Reconstruction**: Automatically parses Filter/Treatment bit-fields to visualize how the ONU handles Untagged, Single-tagged, and Double-tagged frames.
     * **Semantic Mapping**: Translates raw hex values into clear actions (e.g., Insert 1 tag, Modify VID, Discard).
@@ -26,7 +26,7 @@
 ```text
 .
 ├── examples                # pcap and json samples
-│   ├── iphost_graphic.png
+│   ├── iphost_hic.png
 │   ├── mib_after.pcap
 │   ├── mib_before.pcap
 │   ├── mib_omcc_96.pcap
@@ -36,7 +36,7 @@
 │   ├── omcicheck_example.pcap
 │   ├── omcicheck_example.png
 │   ├── omcivlan.png
-│   ├── pptp_graphic.png
+│   ├── pptp_hic.png
 │   └── vendor_355.json
 ├── LICENSE                 # MIT License
 ├── omci                    # Core package
