@@ -26,7 +26,7 @@
 ```text
 .
 ├── examples                # pcap and json samples
-│   ├── iphost_hic.png
+│   ├── iphost_graphic.png
 │   ├── mib_after.pcap
 │   ├── mib_before.pcap
 │   ├── mib_omcc_96.pcap
@@ -36,7 +36,7 @@
 │   ├── omcicheck_example.pcap
 │   ├── omcicheck_example.png
 │   ├── omcivlan.png
-│   ├── pptp_hic.png
+│   ├── pptp_graphic.png
 │   └── vendor_355.json
 ├── LICENSE                 # MIT License
 ├── omci                    # Core package
@@ -81,12 +81,33 @@ export PYTHONPATH="${HOME}/local/lib/python3.12/dist-packages:$PYTHONPATH"
 
 # 3. Apply changes
 source ~/.bashrc
+
+```
+## ⚡ Quick Start (No Python Required!)
+
+### Download Pre-compiled Binaries
+Get ready-to-run executables for your platform:
+
+- **Windows (64-bit)**: [omcipcap.exe](https://github.com/daneshih1125/omcipcap/releases/latest/download/omcipcap.exe)
+- **Linux (64-bit)**: [omcipcap_linux](https://github.com/daneshih1125/omcipcap/releases/latest/download/omcipcap_linux)
+- **macOS (ARM64)**: [omcipcap_mac](https://github.com/daneshih1125/omcipcap/releases/latest/download/omcipcap_mac)
+
+No Python installation required!
+
+### Windows and Linux Usage
+
+```bash
+# Windows
+omcipcap.exe check your_file.pcap
+
+# Linux
+chmod +x omcipcap_linux
+./omcipcap_linux check your_file.pcap
 ```
 
-## Usage
+## Sub-Command
 ### omcipcap check
 Analyze a pcap file to display a summary of all OMCI packets:
-```bash
 omcipcap check examples/omcicheck_example.pcap
 ```
 ![omcicheck output example](examples/omcicheck_example.png)
