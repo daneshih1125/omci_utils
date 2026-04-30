@@ -88,8 +88,8 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: Install build tools
-        run: pip install build twine
+      - name: Install build tool
+        run: pip install build
 
       - name: Build sdist and wheel
         run: python -m build
@@ -111,8 +111,4 @@ jobs:
             dist/*.whl
 
       - name: Publish to PyPI
-        env:
-          TWINE_USERNAME: __token__
-          TWINE_PASSWORD: ${{ secrets.PYPI_API_TOKEN }}
-        run: |
-          twine upload dist/*.tar.gz dist/*.whl
+        uses: pypa/gh-action-pypi-publish@release/v1
