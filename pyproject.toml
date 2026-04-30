@@ -5,11 +5,16 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "omcipcap"
 dynamic = ["version"]
+readme = "README.md"
 description = "OMCI analysis and MIB diff tools"
 requires-python = ">=3.12"
 dependencies = [
     "scapy>=2.5.0",
     "rich>=13.0.0",
+]
+license = {text = "MIT"}
+authors = [
+    {name = "Dong Yuan Shih", email = "daneshih1125@gmail.com"}
 ]
 
 [project.scripts]
