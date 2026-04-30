@@ -108,9 +108,10 @@ chmod +x omcipcap_linux
 ## Sub-Command
 ### omcipcap check
 Analyze a pcap file to display a summary of all OMCI packets:
+```
 omcipcap check examples/omcicheck_example.pcap
 ```
-![omcicheck output example](examples/omcicheck_example.png)
+![omcicheck](https://github.com/daneshih1125/omcipcap/blob/master/examples/omcicheck_example.png)
 
 omcipcap check with --rtt-threshold argument
 ```bash
@@ -171,15 +172,15 @@ To define your own Vendor MEs for the --mib-json flag, use the following structu
 omcipcap graphic omci.pcap
 ```
 will generate output.html in current directory
-![PPTP](examples/pptp_graphic.png)
-![IPHOST](examples/iphost_graphic.png)
+![PPTP](https://github.com/daneshih1125/omcipcap/blob/master/examples/pptp_graphic.png)
+![IPHOST](https://github.com/daneshih1125/omcipcap/blob/master/examples/iphost_graphic.png)
 
 ### omcipcap vlan_tbl
 ```
 omcipcap vlan_tbl omci.pcap
 ```
 List All ME 171 instances and detail of VLAN table
-![omcivlan](examples/omcivlan.png)
+![omcivlan](https://github.com/daneshih1125/omcipcap/blob/master/examples/omcivlan.png)
 
 
 ## Setup omcipcap on Windows Virtual Environment
