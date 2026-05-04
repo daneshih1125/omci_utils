@@ -1,5 +1,10 @@
 # omcipcap
 
+[![PyPI Version](https://img.shields.io/pypi/v/omcipcap?color=blue)](https://pypi.org/project/omcipcap/)
+[![PyPI Downloads](https://img.shields.io/pypi/dm/omcipcap?label=downloads&color=green)](https://pypi.org/project/omcipcap/)
+[![GitHub Total Downloads](https://img.shields.io/github/downloads/daneshih1125/omcipcap/total?label=github%20total&color=orange)](https://github.com/daneshih1125/omcipcap/releases)
+[![License](https://img.shields.io/github/license/daneshih1125/omcipcap)](https://github.com/daneshih1125/omcipcap/blob/main/LICENSE)
+
 `omcipcap` is a professional Python toolkit designed for analyzing and diagnosing **ITU-T G.988 OMCI** (ONT Management and Control Interface) protocols. It streamlines the process of identifying non-standard Managed Entities (MEs) and provisioning failures in GPON/XGS-PON packet captures.
 
 
