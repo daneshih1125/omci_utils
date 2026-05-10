@@ -7,48 +7,12 @@
 import sys
 import os
 import time
-from scapy.all import wrpcap, Ether, Raw
+from scapy.all import wrpcap
 
 # Ensure project modules can be imported
 sys.path.append(os.getcwd())
-from omci.omci import OMCIBaseline, OmciAction, OmciResult
-
-# Define specific MAC addresses for OLT and ONU
-OLT_MAC = "00:00:00:00:00:02"
-ONU_MAC = "00:00:00:00:00:01"
-
-def msg_resp(action_val):
-    return action_val | 0x20
-
-def create_omci(tid, msg_type, me_class, inst_id, content=None, is_from_olt=True):
-    """
-    Directly pack the OMCI fields into a 48-byte binary buffer.
-    No need for OMCIBaseline object creation during pcap generation.
-    """
-    # Header (8 bytes)
-    header = tid.to_bytes(2, 'big')
-    header += int(msg_type).to_bytes(1, 'big')
-    header += b'\x0a'  # Device ID
-    header += me_class.to_bytes(2, 'big')
-    header += inst_id.to_bytes(2, 'big')
-
-    # Content (32 bytes)
-    if content is None:
-        content = b'\x00' * 32
-    else:
-        content = content.ljust(32, b'\x00')
-
-    # Trailer (4 bytes)
-    trailer = b'\x00\x00\x00\x28'
-
-    raw_payload = header + content + trailer
-
-    # Encapsulate with Ethernet
-    src = OLT_MAC if is_from_olt else ONU_MAC
-    dst = ONU_MAC if is_from_olt else OLT_MAC
-
-    # Using Raw() ensures Scapy treats the 48 bytes as the payload
-    return Ether(dst=dst, src=src, type=0x88B5) / Raw(load=raw_payload)
+from utils.gen_utils import create_omci, msg_resp, msg_req
+from omci.omci import OmciAction, OmciResult
 
 def main():
     pkts = []
@@ -114,49 +78,49 @@ def main():
     # Simulate OLT configuring services after sync
     
     # Set IP Host Config Data (Succes)
-    pkts.append(create_omci(tid, OmciAction.SET, 134, 1, is_from_olt=True))
-    pkts.append(create_omci(tid, 0x28, 134, 1, content=bytes([OmciResult.SUCCESS] + [0]*27), is_from_olt=False))
+    pkts.append(create_omci(tid, msg_req(OmciAction.SET), 134, 1, is_from_olt=True))
+    pkts.append(create_omci(tid, msg_resp(OmciAction.SET), 134, 1, content=bytes([OmciResult.SUCCESS] + [0]*27), is_from_olt=False))
     tid += 1
 
     # Create VLAN Tagging Filter Data (Success)
-    pkts.append(create_omci(tid, OmciAction.CREATE, 84, 1, is_from_olt=True))
-    pkts.append(create_omci(tid, 0x24, 84, 1, content=bytes([OmciResult.SUCCESS] + [0]*27), is_from_olt=False))
+    pkts.append(create_omci(tid, msg_req(OmciAction.CREATE), 84, 1, is_from_olt=True))
+    pkts.append(create_omci(tid, msg_resp(OmciAction.CREATE), 84, 1, content=bytes([OmciResult.SUCCESS] + [0]*27), is_from_olt=False))
     tid += 1
 
     # Create VLAN Tagging Filter Data (Instace Exist)
-    pkts.append(create_omci(tid, OmciAction.CREATE, 84, 1, is_from_olt=True))
-    pkts.append(create_omci(tid, 0x24, 84, 1, content=bytes([OmciResult.INSTANCE_EXISTS] + [0]*27), is_from_olt=False))
+    pkts.append(create_omci(tid, msg_req(OmciAction.CREATE), 84, 1, is_from_olt=True))
+    pkts.append(create_omci(tid, msg_resp(OmciAction.CREATE), 84, 1, content=bytes([OmciResult.INSTANCE_EXISTS] + [0]*27), is_from_olt=False))
     tid += 1
 
     # Simulate a failure: OLT tries to Set a Vendor ME that ONU rejects
-    pkts.append(create_omci(tid, OmciAction.SET, 241, 1, is_from_olt=True))
+    pkts.append(create_omci(tid, msg_req(OmciAction.SET), 241, 1, is_from_olt=True))
     # ONU responds with UNKNOWN_ME (4) error
-    pkts.append(create_omci(tid, 0x28, 241, 1, content=bytes([OmciResult.UNKNOWN_ME] + [0]*27), is_from_olt=False))
+    pkts.append(create_omci(tid, msg_resp(OmciAction.SET), 241, 1, content=bytes([OmciResult.UNKNOWN_ME] + [0]*27), is_from_olt=False))
     tid += 1
 
     # Test case (LATE) ---
     curr_time = time.time()
     curr_time += 1.0
-    req = create_omci(tid, OmciAction.GET, 257, 0, is_from_olt=True)
+    req = create_omci(tid, msg_req(OmciAction.GET), 257, 0, is_from_olt=True)
     req.time = curr_time
     pkts.append(req)
 
-    resp = create_omci(tid, 0x29, 257, 0, content=bytes([OmciResult.SUCCESS] + [0]*27), is_from_olt=False)
+    resp = create_omci(tid, msg_resp(OmciAction.GET), 257, 0, content=bytes([OmciResult.SUCCESS] + [0]*27), is_from_olt=False)
     resp.time = curr_time + 1.2
     pkts.append(resp)
     tid += 1
 
     # --- Test case (TID_DUPLICATE)
     curr_time = time.time()
-    req1 = create_omci(tid, OmciAction.GET, 257, 0, is_from_olt=True)
+    req1 = create_omci(tid, msg_req(OmciAction.GET), 257, 0, is_from_olt=True)
     req1.time = curr_time
     pkts.append(req1)
 
-    req2 = create_omci(tid, OmciAction.GET, 257, 0, is_from_olt=True)
+    req2 = create_omci(tid, msg_req(OmciAction.GET), 257, 0, is_from_olt=True)
     req2.time = curr_time + 0.1
     pkts.append(req2)
 
-    resp = create_omci(tid, 0x29, 257, 0, content=bytes([OmciResult.SUCCESS] + [0]*27), is_from_olt=False)
+    resp = create_omci(tid, msg_resp(OmciAction.GET), 257, 0, content=bytes([OmciResult.SUCCESS] + [0]*27), is_from_olt=False)
     resp.time = curr_time + 0.2
     pkts.append(resp)
 
@@ -164,7 +128,7 @@ def main():
     output_file = "omcicheck_example.pcap"
     wrpcap(output_file, pkts)
     print(f"\nGenerated {len(pkts)} packets in {output_file}")
-    print(f"Run analysis: ./bin/omcicheck {output_file}")
+    print(f"Run analysis: omcipcap check {output_file}")
 
 if __name__ == "__main__":
     main()

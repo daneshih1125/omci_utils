@@ -144,32 +144,6 @@ class OMCIPacket:
             return None
 
     @property
-    def mib_upload_entity(self):
-        """
-        For MIB Upload Next Response, parses the carried ME Class and Instance ID.
-        Returns:
-            dict: {"me_class": int, "me_instance": int} if it's a valid response, else None.
-        """
-        if self.action == OmciAction.MIB_UPLOAD_NEXT and self.is_response:
-            # G.988:
-            # content[0:2] = Reported ME Class ID (2 bytes)
-            # content[2:4] = Reported ME Instance ID (2 bytes)
-            try:
-                me_class = int.from_bytes(self.content[0:2], 'big')
-                me_instance = int.from_bytes(self.content[2:4], 'big')
-                attr_mask = int.from_bytes(self.content[4:6], 'big')
-                attr_data = self.content[6:32]
-                return {
-                    "me_class": me_class,
-                    "me_instance": me_instance,
-                    "attr_mask": attr_mask,
-                    "attr_data": attr_data
-                }
-            except (IndexError, ValueError):
-                return None
-        return None
-
-    @property
     def upload_me_class(self):
         if self.action == OmciAction.MIB_UPLOAD_NEXT and self.is_response:
             return int.from_bytes(self.content[0:2], 'big')
@@ -203,6 +177,33 @@ class OMCIBaseline(OMCIPacket):
             self.trailer = raw_data[40:48]
         else:
             self.trailer = raw_data[40:48] if len(raw_data) >= 48 else None
+
+    @property
+    def mib_upload_entity(self):
+        """
+        For MIB Upload Next Response, parses the carried ME Class and Instance ID.
+        Returns:
+            dict: {"me_class": int, "me_instance": int} if it's a valid response, else None.
+        """
+        if self.action == OmciAction.MIB_UPLOAD_NEXT and self.is_response:
+            # G.988:
+            # content[0:2] = Reported ME Class ID (2 bytes)
+            # content[2:4] = Reported ME Instance ID (2 bytes)
+            try:
+                me_class = int.from_bytes(self.content[0:2], 'big')
+                me_instance = int.from_bytes(self.content[2:4], 'big')
+                attr_mask = int.from_bytes(self.content[4:6], 'big')
+                attr_data = self.content[6:32]
+                return {
+                    "me_class": me_class,
+                    "me_instance": me_instance,
+                    "attr_mask": attr_mask,
+                    "attr_data": attr_data
+                }
+            except (IndexError, ValueError):
+                return None
+        return None
+
 
 
 class OMCIExtended(OMCIPacket):
