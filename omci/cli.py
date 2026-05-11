@@ -18,13 +18,12 @@ from omci import omcimib
 from omci import omcigrapher
 from omci.omcivlan import VlanTaggingOperation
 from omci.omcimib import ME_171_ASSOCIATION_TYPE
+from omci.omciflow import show_tcont_speed_flow
 import argparse
 import json
 
-
 def is_baseline(pkt):
     return isinstance(pkt, OMCIBaseline)
-
 
 def run_omcicheck(pcap_path, only_vendor=False, only_failed=False, rtt_threshold=1000):
     print(f"Analyzing: {pcap_path}\n")
@@ -409,6 +408,9 @@ def run_omcivlan(pcap):
 
     console.print(main_table)
 
+def run_tcont_flow(pcap):
+    mib_db = get_all_mib_db(pcap)
+    show_tcont_speed_flow(mib_db)
 
 def main():
     parser = argparse.ArgumentParser(prog="omcipcap", description="OMCI PCAP Diagnostic & Analysis Tool")
@@ -435,6 +437,10 @@ def main():
     vlan_p = subparsers.add_parser("vlan_tbl", help="Analyze OMCI VLAN tagging logic (Table-driven)")
     vlan_p.add_argument("pcap", help="Path to pcap file")
 
+    # --- Sub-command: tcont_flow ---
+    vlan_p = subparsers.add_parser("tcont_flow", help="Trace T-CONT -> GEM -> PQ traffic hierarchy")
+    vlan_p.add_argument("pcap", help="Path to pcap file")
+
     args = parser.parse_args()
 
     if args.command == "check":
@@ -446,6 +452,8 @@ def main():
         run_omcigraph(args.pcap)
     elif args.command == "vlan_tbl":
         run_omcivlan(args.pcap)
+    elif args.command == "tcont_flow":
+        run_tcont_flow(args.pcap)
     else:
         parser.print_help()
 

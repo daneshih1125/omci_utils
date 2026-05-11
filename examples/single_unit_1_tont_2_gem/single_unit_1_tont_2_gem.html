@@ -1,0 +1,93 @@
+
+<!DOCTYPE html>
+<head>
+    <meta charset="UTF-8">
+    <title>OMCI Graph - MAC Bridged Topology</title>
+    <script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/vis-network/9.1.2/standalone/umd/vis-network.min.js"></script>
+    <style type="text/css">
+        body { font-family: "Microsoft JhengHei", Arial, sans-serif; margin: 0; padding: 20px; background-color: #f5f7fa; }
+        #omci-network {
+            width: 100%;
+            height: calc(100vh - 120px);
+            border: 1px solid #d3d3d3;
+            background-color: #ffffff;
+            border-radius: 8px;
+        }
+        .legend { margin-top: 15px; display: flex; gap: 20px; font-size: 14px; }
+        .box-sample { width: 16px; height: 16px; display: inline-block; vertical-align: middle; border: 1px solid #666; }
+    </style>
+</head>
+<body>
+    <h2>OMCI Logical Topology</h2>
+    <div class="legend">
+        <div><span class="box-sample" style="border-radius: 0px; background: #C2FABC;"></span> <b>ONU Created:</b></div>
+        <div><span class="box-sample" style="border-radius: 6px; background: #97C2FC;"></span> <b>OLT Created:</b></div>
+    </div>
+    <div id="omci-network"></div>
+
+    <script type="text/javascript">
+        var container = document.getElementById('omci-network');
+        var nodes = new vis.DataSet([{"id": "262_32768", "label": "T_CONT (262)\n(32768)", "title": "Alloc-ID: 1000\nMode indicator: 1\nPolicy: 1\n", "shape": "box", "margin": 10, "level": 6, "shapeProperties": {"borderRadius": 0}, "color": {"background": "#C2FABC", "border": "#2B7CE9"}, "font": {"multi": true, "size": 14}, "group": "262"}, {"id": "11_257", "label": "PPTP_ETHERNET_UNI (11)\n(257)", "title": "Expected Type: 49\nSensed Type: 49\nAuto Detection Configuration: 0\nEthernet Loopback Configuration: 0\nAdministrative State: 0\nOperational State: 0\nConfiguration Ind: 0\nMax Frame Size: 1518\nDTE or DCE: 0\nPause Time: 0\nBridged or IP Ind: 0\nARC: 0\nARC Interval: 0\nPPPoE Filter: 0\nPower Control: 0\n", "shape": "box", "margin": 10, "level": 0, "shapeProperties": {"borderRadius": 0}, "color": {"background": "#C2FABC", "border": "#2B7CE9"}, "font": {"multi": true, "size": 14}, "group": "11"}, {"id": "171_1", "label": "EXTENDED_VLAN_TAGGING_OPERATION (171)\n(1)", "title": "Association type: 2 (Physical path termination point Ethernet UNI)\nReceived frame VLAN tagging operation table max size: 0\nInput TPID: 8100\nOutput TPID: 8100\nDownstream mode: 0\nReceived frame VLAN tagging operation table: ['F8000000E8000000C00F0000000F0000', 'E8000000E8000000C00F0000000F0000', 'F800000080320000400F000000080320', 'F800000080640000400F000000080640']\nAssociated ME pointer: 257\nDSCP to P-bit mapping: 0\n", "shape": "box", "margin": 10, "level": 1, "shapeProperties": {"borderRadius": 8}, "color": {"background": "#97C2FC", "border": "#2B7CE9"}, "font": {"multi": true, "size": 14}, "group": "171"}, {"id": "45_1", "label": "MAC_BRIDGE (45)\n(1)", "title": "Spanning tree ind: 0\nLearning ind: 1\nPort bridging ind: 1\nPriority: 0\nMax age: 10240\nHello time: 0\nForward delay: 7680\nUnknown MAC discard: 0\nMAC learning depth: 0\nDynamic filtering ageing: 0\n", "shape": "box", "margin": 10, "level": 3, "shapeProperties": {"borderRadius": 8}, "color": {"background": "#97C2FC", "border": "#2B7CE9"}, "font": {"multi": true, "size": 14}, "group": "45"}, {"id": "47_1", "label": "MAC_BRIDGE_PORT (47)\n(1)", "title": "Bridge id pointer: 1\nPort num: 1\nTP type: 1 (Physical path termination point Ethernet UNI)\nTP pointer: 257\nPort priority: 20\nPort path cost: 200\nPort spanning tree ind: 0\nEncapsulation method: 0\nLAN FCS ind: 1\nPort MAC address: 0\nOutbound TD pointer: 0\nInbound TD pointer: 0\n", "shape": "box", "margin": 10, "level": 2, "shapeProperties": {"borderRadius": 8}, "color": {"background": "#97C2FC", "border": "#2B7CE9"}, "font": {"multi": true, "size": 14}, "group": "47"}, {"id": "268_1", "label": "GEM_PORT_NETWORK_CTP (268)\n(1)", "title": "Port-ID: 1001\nT-CONT pointer: 32768\nDirection: 3\nTraffic management pointer upstream: 32775\nTraffic descriptor profile pointer for upstream: 1\nUNI counter: 0\nPriority queue pointer for downstream: 0\nEncryption state: 0\nTraffic descriptor profile pointer for downstream: 0\n", "shape": "box", "margin": 10, "level": 5, "shapeProperties": {"borderRadius": 8}, "color": {"background": "#97C2FC", "border": "#2B7CE9"}, "font": {"multi": true, "size": 14}, "group": "268"}, {"id": "268_2", "label": "GEM_PORT_NETWORK_CTP (268)\n(2)", "title": "Port-ID: 1002\nT-CONT pointer: 32768\nDirection: 3\nTraffic management pointer upstream: 32768\nTraffic descriptor profile pointer for upstream: 2\nUNI counter: 0\nPriority queue pointer for downstream: 6\nEncryption state: 0\nTraffic descriptor profile pointer for downstream: 0\n", "shape": "box", "margin": 10, "level": 5, "shapeProperties": {"borderRadius": 8}, "color": {"background": "#97C2FC", "border": "#2B7CE9"}, "font": {"multi": true, "size": 14}, "group": "268"}, {"id": "130_1", "label": "DOT1P_MAPPER (130)\n(1)", "title": "TP pointer: 65534\nInterwork TP pointer P0: 1\nInterwork TP pointer P1: 1\nInterwork TP pointer P2: 1\nInterwork TP pointer P3: 1\nInterwork TP pointer P4: 1\nInterwork TP pointer P5: 1\nInterwork TP pointer P6: 1\nInterwork TP pointer P7: 1\nUnmarked frame option: 1\nDSCP to P-bit mapping: 0\nDefault P-bit marking: 7\nTP Type: 0\n", "shape": "box", "margin": 10, "level": 3, "shapeProperties": {"borderRadius": 8}, "color": {"background": "#97C2FC", "border": "#2B7CE9"}, "font": {"multi": true, "size": 14}, "group": "130"}, {"id": "47_2", "label": "MAC_BRIDGE_PORT (47)\n(2)", "title": "Bridge id pointer: 1\nPort num: 2\nTP type: 3 (IEEE 802.1p mapper service profile)\nTP pointer: 1\nPort priority: 20\nPort path cost: 200\nPort spanning tree ind: 0\nEncapsulation method: 0\nLAN FCS ind: 1\nPort MAC address: 0\nOutbound TD pointer: 0\nInbound TD pointer: 0\n", "shape": "box", "margin": 10, "level": 2, "shapeProperties": {"borderRadius": 8}, "color": {"background": "#97C2FC", "border": "#2B7CE9"}, "font": {"multi": true, "size": 14}, "group": "47"}, {"id": "266_1", "label": "GEM_INTERWORKING_TERMINATION_POINT (266)\n(1)", "title": "GEM port network CTP pointer: 1\nInterworking option: 5\nService profile pointer: 1\nInterworking TP pointer: 0\nPPTP counter: 0\nOperational state: 0\nGAL profile pointer: 10\nGAL loopback configuration: 0\n", "shape": "box", "margin": 10, "level": 4, "shapeProperties": {"borderRadius": 8}, "color": {"background": "#97C2FC", "border": "#2B7CE9"}, "font": {"multi": true, "size": 14}, "group": "266"}, {"id": "84_2", "label": "VLAN_TAGGING_FILTER (84)\n(2)", "title": "VLAN filter list: 006400000000000000000000000000000000000000000000\nForward operation: 16\nNumber of entries: 1\n", "shape": "box", "margin": 10, "level": 1, "shapeProperties": {"borderRadius": 8}, "color": {"background": "#97C2FC", "border": "#2B7CE9"}, "font": {"multi": true, "size": 14}, "group": "84"}, {"id": "130_2", "label": "DOT1P_MAPPER (130)\n(2)", "title": "TP pointer: 65534\nInterwork TP pointer P0: 2\nInterwork TP pointer P1: 2\nInterwork TP pointer P2: 2\nInterwork TP pointer P3: 2\nInterwork TP pointer P4: 2\nInterwork TP pointer P5: 2\nInterwork TP pointer P6: 2\nInterwork TP pointer P7: 2\nUnmarked frame option: 1\nDSCP to P-bit mapping: 0\nDefault P-bit marking: 7\nTP Type: 0\n", "shape": "box", "margin": 10, "level": 3, "shapeProperties": {"borderRadius": 8}, "color": {"background": "#97C2FC", "border": "#2B7CE9"}, "font": {"multi": true, "size": 14}, "group": "130"}, {"id": "47_3", "label": "MAC_BRIDGE_PORT (47)\n(3)", "title": "Bridge id pointer: 1\nPort num: 3\nTP type: 3 (IEEE 802.1p mapper service profile)\nTP pointer: 2\nPort priority: 20\nPort path cost: 200\nPort spanning tree ind: 0\nEncapsulation method: 0\nLAN FCS ind: 1\nPort MAC address: 0\nOutbound TD pointer: 0\nInbound TD pointer: 0\n", "shape": "box", "margin": 10, "level": 2, "shapeProperties": {"borderRadius": 8}, "color": {"background": "#97C2FC", "border": "#2B7CE9"}, "font": {"multi": true, "size": 14}, "group": "47"}, {"id": "266_2", "label": "GEM_INTERWORKING_TERMINATION_POINT (266)\n(2)", "title": "GEM port network CTP pointer: 2\nInterworking option: 5\nService profile pointer: 2\nInterworking TP pointer: 0\nPPTP counter: 0\nOperational state: 0\nGAL profile pointer: 10\nGAL loopback configuration: 0\n", "shape": "box", "margin": 10, "level": 4, "shapeProperties": {"borderRadius": 8}, "color": {"background": "#97C2FC", "border": "#2B7CE9"}, "font": {"multi": true, "size": 14}, "group": "266"}, {"id": "84_3", "label": "VLAN_TAGGING_FILTER (84)\n(3)", "title": "VLAN filter list: 00C800000000000000000000000000000000000000000000\nForward operation: 16\nNumber of entries: 1\n", "shape": "box", "margin": 10, "level": 1, "shapeProperties": {"borderRadius": 8}, "color": {"background": "#97C2FC", "border": "#2B7CE9"}, "font": {"multi": true, "size": 14}, "group": "84"}]);
+        var edges = new vis.DataSet([{"from": "171_1", "to": "11_257", "label": "assoc_ptr", "arrows": "to"}, {"from": "47_1", "to": "45_1", "label": "bridge_ptr", "arrows": "to"}, {"from": "47_1", "to": "11_257", "label": "tp_ptr", "arrows": "to"}, {"from": "268_1", "to": "262_32768", "label": "tcont_ptr", "arrows": "to"}, {"from": "268_2", "to": "262_32768", "label": "tcont_ptr", "arrows": "to"}, {"from": "47_2", "to": "45_1", "label": "bridge_ptr", "arrows": "to"}, {"from": "47_2", "to": "130_1", "label": "tp_ptr", "arrows": "to"}, {"from": "266_1", "to": "268_1", "label": "gem_ptr", "arrows": "to"}, {"from": "266_1", "to": "130_1", "label": "srv_ptr", "arrows": "to"}, {"from": "84_2", "to": "47_2", "label": "Filter-on", "arrows": "to", "dashes": true}, {"from": "47_3", "to": "45_1", "label": "bridge_ptr", "arrows": "to"}, {"from": "47_3", "to": "130_2", "label": "tp_ptr", "arrows": "to"}, {"from": "266_2", "to": "268_2", "label": "gem_ptr", "arrows": "to"}, {"from": "266_2", "to": "130_2", "label": "srv_ptr", "arrows": "to"}, {"from": "84_3", "to": "47_3", "label": "Filter-on", "arrows": "to", "dashes": true}]);
+        var data = { nodes: nodes, edges: edges };
+        var options = {
+            layout: {
+                hierarchical: {
+                    enabled: true,
+                    direction: 'DU',
+                    sortMethod: 'defined',
+                    levelSeparation: 150,
+                    nodeSpacing: 150,
+                    treeSpacing: 200,
+                    edgeMinimization: true,
+                    parentCentralization: true
+                }
+            },
+            physics: {
+                enabled: false,
+                solver: 'forceAtlas2Based',
+                forceAtlas2Based: {
+                    gravitationalConstant: -100,
+                    centralGravity: 0.01,
+                    springLength: 150,
+                    avoidOverlap: 1
+                },
+                stabilization: { iterations: 150 }
+            },
+            nodes: {
+                margin: 15,
+                widthConstraint: { minimum: 300, maximum: 450 },
+                font: {
+                    size: 32,
+                    multi: true,
+                    face: 'monospace',
+                    bold: { color: '#000', size: 34 }
+                },
+                shadow: { enabled: true, size: 10 }
+            },
+            edges: {
+                width: 3,
+                smooth: {
+                    enabled: true,
+                    type: 'cubicBezier',
+                    forceDirection: 'vertical',
+                    roundness: 0.5
+                },
+                arrows: { to: { enabled: true, scaleFactor: 1.5 } }
+            },
+            interaction: {
+                hover: true,
+                navigationButtons: true
+            }
+        };
+        var network = new vis.Network(container, data, options);
+        network.once("stabilizationIterationsDone", function() {
+            network.moveTo({
+                position: {x: 0, y: 0},
+                scale: 1.2,
+                animation: false
+            });
+        });
+    </script>
+</body>
+</html>

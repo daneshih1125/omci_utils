@@ -1067,10 +1067,11 @@ ME_SPEC = {
             ("T-CONT pointer", 2, "u16", True),
             ("Direction", 1, "u8", True),
             ("Traffic management pointer upstream", 2, "u16", True),
-            ("Traffic descriptor profile pointer", 2, "u16", True),
+            ("Traffic descriptor profile pointer for upstream", 2, "u16", True),
             ("UNI counter", 1, "u8", False),
-            ("Priority queue pointer downstream", 2, "u16", True),
+            ("Priority queue pointer for downstream", 2, "u16", True),
             ("Encryption state", 1, "u8", False),
+            ("Traffic descriptor profile pointer for downstream", 2, "u16", False),
         ],
     ),
     # 9.2.7 GAL TDM profile

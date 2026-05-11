@@ -5,7 +5,7 @@
 [![GitHub Total Downloads](https://img.shields.io/github/downloads/daneshih1125/omcipcap/total?label=github%20total&color=orange)](https://github.com/daneshih1125/omcipcap/releases)
 [![License](https://img.shields.io/github/license/daneshih1125/omcipcap)](https://github.com/daneshih1125/omcipcap/blob/main/LICENSE)
 
-`omcipcap` is a professional Python toolkit designed for analyzing and diagnosing **ITU-T G.988 OMCI** (ONT Management and Control Interface) protocols. It streamlines the process of identifying non-standard Managed Entities (MEs) and provisioning failures in GPON/XGS-PON packet captures.
+`omcipcap` is a professional Python toolkit designed for analyzing and diagnosing **ITU-T G.988 OMCI** (ONT Management and Control Interface) protocols. It streamlines the process of identifying non-standard Managed Entities (MEs) and provisioning failures in GPON/XGS-PON packet captures, to visualizing network topology, decoding VLAN logic, and tracing upstream T-CONT traffic flows.
 
 
 
@@ -24,6 +24,10 @@
     * **Semantic Mapping**: Translates raw hex values into clear actions (e.g., Insert 1 tag, Modify VID, Discard).
     * **ME Association**: Links VLAN rules directly to their associated Managed Entities, such as Physical Path Termination Points (PPTP) or MAC Bridge Ports, showing the exact association mode and instance IDs.
     * **Detailed Bit-Field Breakdown**: Includes a technical view of internal bit-fields (Filter/Treatment/Tags Removed) for senior engineers to verify exact hardware-level logic.
+* **`omcipcap tcont_flow`**: Traces the complete upstream traffic path from T-CONT to GEM ports, displaying Alloc-ID assignment status, associated Priority Queues (upstream/downstream), and traffic shaping parameters in a tree-structured view.
+    * **T-CONT Activation Status**: Instantly identifies unassigned T-CONTs (Alloc-ID = 0xFFFF) versus active ones.
+    * **GEM Port Mapping**: Shows each GEM port bound to the T-CONT with its upstream and downstream Priority Queue linkage.
+    * **Traffic Parameters**: Displays CIR/PIR bandwidth and scheduling policy per Priority Queue for quick QoS verification.
 * **Professional Output**: Features color-coded Terminal output and standardized hex formatting for Instance IDs.
 
 ## Project Structure
@@ -187,6 +191,31 @@ omcipcap vlan_tbl omci.pcap
 List All ME 171 instances and detail of VLAN table
 ![omcivlan](https://github.com/daneshih1125/omcipcap/blob/master/examples/omcivlan.png)
 
+### omcipcap tcont_flow
+```
+omcipcap tcont_flow examples/single_unit_1_tont_2_gem/single_unit_1_tont_2_gem.pcap
+```
+Traces the complete upstream traffic hierarchy from T-CONT → GEM Port → Priority Queue and displays bandwidth/scheduling parameters in a tree view.
+
+Example Output:
+```plaintext
+GPON T-CONT Flow Analysis
+├── T-CONT 32768 (alloc-id=1000)
+│   ├── GEM 1001
+│   │   ├── [US] PQ 32775 → up:CIR=0.128Mbps/PIR=9953.28Mbps
+│   │   └── [DS] PQ 0 → Priority 0 dn:Unrestricted
+│   └── GEM 1002
+│       ├── [US] PQ 32768 → up:CIR=0.128Mbps/PIR=100Mbps
+│       └── [DS] PQ 6 → Priority 6 dn:Unrestricted
+└── T-CONT 32769 (Unassigned)
+```
+
+Each T-CONT entry shows:
+- **alloc-id**: The Alloc-ID assigned by the OLT; `Unassigned` means the T-CONT has not been activated (Alloc-ID = 0xFFFF).
+- **GEM ports**: All GEM Port Network CTPs bound to this T-CONT.
+- **[US] PQ**: Upstream Priority Queue with CIR/PIR bandwidth limits.
+- **[DS] PQ**: Downstream Priority Queue with scheduling priority.
+
 
 ## Setup omcipcap on Windows Virtual Environment
 1. Create the Environment
@@ -226,6 +255,7 @@ positional arguments:
     diff                Compare MIB snapshots between two pcaps
     graphic             Generate interactive topology HTML
     vlan_tbl            Analyze OMCI VLAN tagging logic (Table-driven)
+    tcont_flow          Trace T-CONT -> GEM -> PQ traffic hierarchy
 
 options:
   -h, --help            show this help message and exit
