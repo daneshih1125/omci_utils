@@ -30,6 +30,15 @@
     * **Traffic Parameters**: Displays CIR/PIR bandwidth and scheduling policy per Priority Queue for quick QoS verification.
 * **Professional Output**: Features color-coded Terminal output and standardized hex formatting for Instance IDs.
 
+## Why Use omcipcap?
+
+`omcipcap` is built to bridge the gap between complex raw protocol data and actionable engineering insights. It significantly reduces the time required for root-cause analysis in both lab and field environments.
+
+![omcipcap_savetime](./examples/omcipcap_savetime.png)
+
+> **Key Impact**: Transform hour-long manual packet tracing into seconds of automated analysis, allowing engineers to focus on fixing bugs rather than finding them.
+
+
 ## Project Structure
 
 ```text
