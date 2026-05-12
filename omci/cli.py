@@ -261,7 +261,7 @@ def get_all_mib_db(pcap_path):
         pkts = rdpcap(pcap_path)
     except Exception as e:
         print(f"Error reading {pcap_path}: {e}")
-        return snapshot
+        return mib_db
 
     for i, pkt in enumerate(pkts):
         # Skip non-OMCI packets
