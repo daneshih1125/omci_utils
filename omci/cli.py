@@ -1,16 +1,14 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 #
-# Copyright (c) 2026 Dong Yuan, Shih <daneshih1125@gmail.com>
+# Copyright (c) 2026 Dong-Yuan Shih <daneshih1125@gmail.com>
 # Licensed under the MIT License.
 # See LICENSE file in the project root for full license information.
 
-import sys
 import os
 from scapy.all import rdpcap
 from rich.console import Console
 from rich.table import Table
-from rich.panel import Panel
 from rich.text import Text
 from rich.box import SIMPLE, ROUNDED
 from omci.omci import OMCIBaseline, OMCIPacket, OmciResult, OmciAction
@@ -22,15 +20,18 @@ from omci.omciflow import show_tcont_speed_flow
 import argparse
 import json
 
+
 def is_baseline(pkt):
     return isinstance(pkt, OMCIBaseline)
 
-def run_omcicheck(pcap_path, only_vendor=False, only_failed=False, rtt_threshold=1000):
-    print(f"Analyzing: {pcap_path}\n")
-    header = f"{'No.':<6} {'ID':<8} {'Action':<18} {'ME Class':<12} {'ME Instance':<12} {'Result':<30} {'RTT':<12} {'Status':<16} {'ME desc':<40}"
-    print(header)
-    print("-" * 120)
 
+def run_omcicheck(
+    pcap_path,
+    only_vendor=False,
+    only_failed=False,
+    rtt_threshold=1000,
+    json_output=False,
+):
     try:
         raw_pkts = rdpcap(pcap_path)
     except Exception as e:
@@ -42,6 +43,15 @@ def run_omcicheck(pcap_path, only_vendor=False, only_failed=False, rtt_threshold
     count_duplicate = 0
     count_late = 0
     request_timestamps = {}
+    check_result = {
+        "packets": [],
+        "summary": {
+            "resp_fail_count": 0,
+            "is_vendor_me_count": 0,
+            "transaction_id_duplicate_count": 0,
+            "resp_late_count": 0,
+        },
+    }
 
     for i, raw_pkt in enumerate(raw_pkts):
         # Skip non-OMCI packets
@@ -62,9 +72,7 @@ def run_omcicheck(pcap_path, only_vendor=False, only_failed=False, rtt_threshold
         is_duplicate = False
         is_late = False
         action_name = ""
-        me_display = ""
-        inst_display = ""
-        res_text = ""
+        resp_result = {}
         rtt = 0
         status = ""
 
@@ -86,17 +94,20 @@ def run_omcicheck(pcap_path, only_vendor=False, only_failed=False, rtt_threshold
             me_inst = omci_pkt.inst_id
 
         # Display non-standard MEs and non-success responses during OLT provisioning.
-        if omci_pkt.result != None:
+        if omci_pkt.result is not None:
             res_val = omci_pkt.result
-            if res_val != OmciResult.SUCCESS:
+            resp_result["code"] = res_val
+            if resp_result["code"] != OmciResult.SUCCESS:
                 is_fail = True
                 count_fail += 1
+                resp_result["success"] = False
                 try:
-                    res_text = f"Err: {OmciResult(res_val).name} ({res_val})"
+                    resp_result["text"] = f"Err: {OmciResult(res_val).name}"
                 except ValueError:
-                    res_text = f"Err: Unknown ({res_val})"
+                    resp_result["text"] = "Err: Unknown"
             else:
-                res_text = "Success"
+                resp_result["success"] = True
+                resp_result["text"] = "SUCCESS"
 
             if omci_pkt.transaction_id in request_timestamps:
                 rtt = raw_pkt.time - request_timestamps[omci_pkt.transaction_id]
@@ -120,25 +131,39 @@ def run_omcicheck(pcap_path, only_vendor=False, only_failed=False, rtt_threshold
             continue
 
         me_desc = omcimib.get_me_name(me_class)
-
         if is_fail or is_vendor or is_duplicate or is_late:
-            color = "\033[91m" if is_fail else "\033[93m"
-            reset = "\033[0m"
             action_name = (
                 omci_pkt.action.name
                 if hasattr(omci_pkt.action, "name")
                 else f"Action({omci_pkt.action})"
             )
-            inst_str = f"0x{me_inst:04x}"
-            print(
-                f"{color}{i + 1:<6} {omci_pkt.transaction_id:<8} {action_name:<18} {me_class:<12} {inst_str:<12} {res_text:<30} {rtt:<12} {status:<16} {me_desc:<40}{reset}"
+            check_result["packets"].append(
+                {
+                    "packet_no": i + 1,
+                    "transaction_id": omci_pkt.transaction_id,
+                    "action": action_name,
+                    "me_class": me_class,
+                    "me_instance_id": me_inst,
+                    "me_name": me_desc,
+                    "result": resp_result,
+                    "rtt": float(rtt),
+                    "status": status,
+                    "from_olt": omci_pkt.is_request,
+                }
             )
+    check_result["summary"] = {
+        "resp_fail_count": count_fail,
+        "is_vendor_me_count": count_vendor,
+        "resp_late_count": count_late,
+        "transaction_id_duplicate_count": count_duplicate,
+    }
 
-    print("-" * 120)
+    if json_output:
+        print(json.dumps(check_result, indent=2))
+    else:
+        from .omcirich import render_check_table
 
-    print(
-        f"Summary: Found {count_fail} failures, {count_vendor} Vendor packets, {count_duplicate} duplicate packets, {count_late} late packets"
-    )
+        render_check_table(check_result)
 
 
 def load_mib_json(json_path):
@@ -408,45 +433,76 @@ def run_omcivlan(pcap):
 
     console.print(main_table)
 
+
 def run_tcont_flow(pcap):
     mib_db = get_all_mib_db(pcap)
     show_tcont_speed_flow(mib_db)
 
+
 def main():
-    parser = argparse.ArgumentParser(prog="omcipcap", description="OMCI PCAP Diagnostic & Analysis Tool")
-    subparsers = parser.add_subparsers(dest="command", help="Available analysis commands")
+    parser = argparse.ArgumentParser(
+        prog="omcipcap", description="OMCI PCAP Diagnostic & Analysis Tool"
+    )
+
+    common_args = argparse.ArgumentParser(add_help=False)
+    common_args.add_argument(
+        "--json-output", action="store_true", help="Output results in JSON format"
+    )
+
+    subparsers = parser.add_subparsers(
+        dest="command", help="Available analysis commands"
+    )
 
     # --- Sub-command: check ---
-    check_p = subparsers.add_parser("check", help="Analyze RTT, TID duplicates, and failures")
+    check_p = subparsers.add_parser(
+        "check", parents=[common_args], help="Analyze RTT, TID duplicates, and failures"
+    )
     check_p.add_argument("pcap", help="Path to pcap file")
-    check_p.add_argument("--rtt-threshold", type=float, default=1000.0, help="RTT threshold in ms")
+    check_p.add_argument(
+        "--rtt-threshold", type=float, default=1000.0, help="RTT threshold in ms"
+    )
     check_p.add_argument("--only-vendor", action="store_true")
     check_p.add_argument("--only-failed", action="store_true")
 
     # --- Sub-command: diff ---
-    diff_p = subparsers.add_parser("diff", help="Compare MIB snapshots between two pcaps")
+    diff_p = subparsers.add_parser(
+        "diff", help="Compare MIB snapshots between two pcaps"
+    )
     diff_p.add_argument("pcap1", help="Baseline pcap")
     diff_p.add_argument("pcap2", help="Target pcap")
     diff_p.add_argument("--mib-json", help="Custom ME JSON definition")
 
     # --- Sub-command: graphic ---
-    graph_p = subparsers.add_parser("graphic", help="Generate interactive topology HTML")
+    graph_p = subparsers.add_parser(
+        "graphic", help="Generate interactive topology HTML"
+    )
     graph_p.add_argument("pcap", help="Path to pcap file")
 
     # --- Sub-command: vlan_tbl ---
-    vlan_p = subparsers.add_parser("vlan_tbl", help="Analyze OMCI VLAN tagging logic (Table-driven)")
+    vlan_p = subparsers.add_parser(
+        "vlan_tbl", help="Analye OMCI VLAN tagging logic (Table-driven)"
+    )
     vlan_p.add_argument("pcap", help="Path to pcap file")
 
     # --- Sub-command: tcont_flow ---
-    vlan_p = subparsers.add_parser("tcont_flow", help="Trace T-CONT -> GEM -> PQ traffic hierarchy")
+    vlan_p = subparsers.add_parser(
+        "tcont_flow", help="Trace T-CONT -> GEM -> PQ traffic hierarchy"
+    )
     vlan_p.add_argument("pcap", help="Path to pcap file")
 
     args = parser.parse_args()
 
     if args.command == "check":
-        run_omcicheck(args.pcap, args.only_vendor, args.only_failed, args.rtt_threshold)
+        run_omcicheck(
+            args.pcap,
+            args.only_vendor,
+            args.only_failed,
+            args.rtt_threshold,
+            json_output=args.json_output,
+        )
     elif args.command == "diff":
-        if args.mib_json: load_mib_json(args.mib_json)
+        if args.mib_json:
+            load_mib_json(args.mib_json)
         run_omcidiff(args.pcap1, args.pcap2)
     elif args.command == "graphic":
         run_omcigraph(args.pcap)
@@ -456,6 +512,7 @@ def main():
         run_tcont_flow(args.pcap)
     else:
         parser.print_help()
+
 
 if __name__ == "__main__":
     main()

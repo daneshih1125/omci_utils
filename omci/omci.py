@@ -1,15 +1,16 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 #
-# Copyright (c) 2026 Dong Yuan, Shih <daneshih1125@gmail.com> 
+# Copyright (c) 2026 Dong-Yuan Shih <daneshih1125@gmail.com>
 # Licensed under the MIT License.
 # See LICENSE file in the project root for full license information.
 
 from enum import IntEnum
-from omci.omcimib import ME_SPEC
+
 
 class OmciAction(IntEnum):
     """ITU-T G.988 Table 11.2.2-1 (Action ID)"""
+
     CREATE = 4
     DELETE = 6
     SET = 8
@@ -34,8 +35,10 @@ class OmciAction(IntEnum):
     GET_CURRENT_DATA = 28
     SET_TABLE = 29
 
+
 class OmciResult(IntEnum):
     """OMCI Result codes"""
+
     SUCCESS = 0
     PROCESSING_ERROR = 1
     NOT_SUPPORTED = 2
@@ -48,15 +51,30 @@ class OmciResult(IntEnum):
 
 
 class OMCIPacket:
-    __slots__ = ('transaction_id', 'message_type', 'device_id', 'ak', 'action', 'me_class', 'inst_id')
+    __slots__ = (
+        "transaction_id",
+        "message_type",
+        "device_id",
+        "ak",
+        "action",
+        "me_class",
+        "inst_id",
+    )
+
+    NO_RESULT_ACTIONS = {
+        OmciAction.MIB_UPLOAD,
+        OmciAction.MIB_UPLOAD_NEXT,
+        OmciAction.GET_ALL_ALARMS,
+        OmciAction.GET_ALL_ALARMS_NEXT,
+    }
 
     def __init__(self, data):
-        self.transaction_id = int.from_bytes(data[0:2], 'big')
+        self.transaction_id = int.from_bytes(data[0:2], "big")
         self.message_type = data[2]
         self.device_id = data[3]
         self.ak = bool(self.message_type & 0x20)
-        self.me_class = int.from_bytes(data[4:6], 'big')
-        self.inst_id = int.from_bytes(data[6:8], 'big')
+        self.me_class = int.from_bytes(data[4:6], "big")
+        self.inst_id = int.from_bytes(data[6:8], "big")
 
         action_val = self.message_type & 0x1F
         try:
@@ -93,17 +111,17 @@ class OMCIPacket:
     @classmethod
     def from_values(cls, transaction_id, message_type, me_class, inst_id, content=None):
         # TID (2) + MT (1) + DevID (1) + ME Class (2) + ME Inst (2) = 8 bytes
-        header = transaction_id.to_bytes(2, 'big')
-        header += message_type.to_bytes(1, 'big')
-        header += b'\x0a'  # Device ID (Baseline = 0x0A)
-        header += me_class.to_bytes(2, 'big')
-        header += inst_id.to_bytes(2, 'big')
+        header = transaction_id.to_bytes(2, "big")
+        header += message_type.to_bytes(1, "big")
+        header += b"\x0a"  # Device ID (Baseline = 0x0A)
+        header += me_class.to_bytes(2, "big")
+        header += inst_id.to_bytes(2, "big")
 
         # 32 bytes of content
         if content is None:
-            content = b'\x00' * 32
+            content = b"\x00" * 32
         elif len(content) < 32:
-            content = content.ljust(32, b'\x00')
+            content = content.ljust(32, b"\x00")
 
         # raw data (Header + Content), ignore trailer
         full_raw = header + content
@@ -112,29 +130,13 @@ class OMCIPacket:
 
     @property
     def is_request(self):
-        if self.is_response:
-            return False
-
-        no_result_actions = {
-            OmciAction.MIB_UPLOAD,
-            OmciAction.MIB_UPLOAD_NEXT,
-            OmciAction.GET_ALL_ALARMS,
-            OmciAction.GET_ALL_ALARMS_NEXT
-        }
-        return self.action not in no_result_actions
+        return not self.is_response
 
     @property
     def has_result_code(self):
         if not self.is_response:
             return False
-            
-        no_result_actions = {
-            OmciAction.MIB_UPLOAD,
-            OmciAction.MIB_UPLOAD_NEXT,
-            OmciAction.GET_ALL_ALARMS,
-            OmciAction.GET_ALL_ALARMS_NEXT
-        }
-        return self.action not in no_result_actions
+        return self.action not in self.NO_RESULT_ACTIONS
 
     @property
     def result(self):
@@ -146,34 +148,41 @@ class OMCIPacket:
     @property
     def upload_me_class(self):
         if self.action == OmciAction.MIB_UPLOAD_NEXT and self.is_response:
-            return int.from_bytes(self.content[0:2], 'big')
+            return int.from_bytes(self.content[0:2], "big")
         return None
 
     @property
     def mib_upload_is_vendor(self):
         c = self.upload_me_class
-        if c is None: return False
+        if c is None:
+            return False
         # Table 11.2.4-1 Vendor ranges
         return (240 <= c <= 255) or (350 <= c <= 399) or (65280 <= c <= 65535)
 
     @property
     def mib_upload_is_feature(self):
         c = self.upload_me_class
-        if c is None: return False
+        if c is None:
+            return False
         return (172 <= c <= 239) or (467 <= c <= 65279)
 
+
 class OMCIBaseline(OMCIPacket):
-    __slots__ = ('content', 'trailer')
+    __slots__ = ("content", "trailer")
 
     def __init__(self, raw_data, ignore_trailer=True):
         super().__init__(raw_data)
         if len(raw_data) < 40:
-            raise ValueError(f"Baseline packet too short: {len(raw_data)} bytes (min 40)")
+            raise ValueError(
+                f"Baseline packet too short: {len(raw_data)} bytes (min 40)"
+            )
         self.content = raw_data[8:40]
 
         if not ignore_trailer:
             if len(raw_data) < 48:
-                raise ValueError(f"Baseline trailer missing: {len(raw_data)} bytes (expected 48)")
+                raise ValueError(
+                    f"Baseline trailer missing: {len(raw_data)} bytes (expected 48)"
+                )
             self.trailer = raw_data[40:48]
         else:
             self.trailer = raw_data[40:48] if len(raw_data) >= 48 else None
@@ -190,28 +199,28 @@ class OMCIBaseline(OMCIPacket):
             # content[0:2] = Reported ME Class ID (2 bytes)
             # content[2:4] = Reported ME Instance ID (2 bytes)
             try:
-                me_class = int.from_bytes(self.content[0:2], 'big')
-                me_instance = int.from_bytes(self.content[2:4], 'big')
-                attr_mask = int.from_bytes(self.content[4:6], 'big')
+                me_class = int.from_bytes(self.content[0:2], "big")
+                me_instance = int.from_bytes(self.content[2:4], "big")
+                attr_mask = int.from_bytes(self.content[4:6], "big")
                 attr_data = self.content[6:32]
                 return {
                     "me_class": me_class,
                     "me_instance": me_instance,
                     "attr_mask": attr_mask,
-                    "attr_data": attr_data
+                    "attr_data": attr_data,
                 }
             except (IndexError, ValueError):
                 return None
         return None
 
 
-
 class OMCIExtended(OMCIPacket):
-    __slots__ = ('length', 'content')
+    __slots__ = ("length", "content")
 
     def __init__(self, raw_data, src_mac=None):
         super().__init__(raw_data)
-        self.length = int.from_bytes(raw_data[8:10], byteorder='big')
+        self.length = int.from_bytes(raw_data[8:10], byteorder="big")
         self.content = raw_data[10 : 10 + self.length]
+
 
 # vim: set ts=4 sw=4 et:
