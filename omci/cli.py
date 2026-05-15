@@ -7,10 +7,6 @@
 
 import os
 from scapy.all import rdpcap
-from rich.console import Console
-from rich.table import Table
-from rich.text import Text
-from rich.box import SIMPLE, ROUNDED
 from omci.omci import OMCIBaseline, OMCIPacket, OmciResult, OmciAction
 from omci import omcimib
 from omci import omcigrapher
@@ -364,74 +360,43 @@ def get_downstream_semantic(mode):
     return mapping.get(mode, f"M{mode}?")
 
 
-def run_omcivlan(pcap):
-    console = Console()
-
+def run_omcivlan(pcap, json_output=False):
     mib_db = get_all_mib_db(pcap)
     vlan_db = get_instances_by_class(mib_db, 171)
-
-    # Main Table
-    main_table = Table(
-        title="[bold white]OMCI VLAN Logic Analyzer[/]",
-        box=ROUNDED,
-        header_style="bold magenta",
-        show_lines=True,
-        expand=True,
-    )
-
-    main_table.add_column("ME inst ID", justify="center", style="cyan", width=12)
-    main_table.add_column("VLAN Rules (Sub-Table)", width=75)
-    main_table.add_column("Association / Mode", justify="center", width=20)
+    vlan_data_list = []
 
     for vlan in vlan_db:
-        inst_id = vlan.inst_id
         attrs = vlan.attributes
-
-        # --- Sub-Table for VLAN rules ---
-        sub_table = Table(box=SIMPLE, header_style="italic yellow", expand=True)
-        sub_table.add_column("Idx", width=4, justify="center")
-        sub_table.add_column("Action / Semantic", width=25)
-        sub_table.add_column("Detailed Bit-Fields (Filter / Treatment / Tags Removed )")
-
         raw_rows = attrs.get("Received frame VLAN tagging operation table", [])
         rows = raw_rows if isinstance(raw_rows, list) else [raw_rows]
 
-        for idx, row_hex in enumerate(rows):
+        rules = []
+        for row_hex in rows:
             vlan_op = VlanTaggingOperation(row_hex)
-            d = vlan_op.data
-
-            idx_style = "bold red"
-            idx_text = Text(str(idx), style=idx_style)
-
-            # Bit-Fields
-            # F: Filter, T: Treatment, R: Remove Tag
-            bit_info = (
-                f"[dim]F:[/] [cyan]O:{d['f_out_prio']}/{d['f_out_vid']} I:{d['f_in_prio']}/{d['f_in_vid']} E:{d['f_eth_type']}[/] "
-                f"[dim]T:[/] [yellow]O:{d['t_out_prio']}/{d['t_out_vid']} I:{d['t_in_prio']}/{d['t_in_vid']}[/] "
-                f"[magenta]R:{d['t_tags_rem']}[/]"
+            rules.append(
+                {
+                    "action_type": vlan_op.action_type,
+                    "data": vlan_op.data,
+                }
             )
-
-            sub_table.add_row(
-                idx_text,
-                Text(vlan_op.action_type, style="bold green"),
-                bit_info,
-            )
-
-        # --- Association / Mode ---
-        assoc_ptr = attrs.get("Associated ME pointer", "N/A")
-        assoc_type = attrs.get("Association type", -1)
-        assoc_type_desc = ME_171_ASSOCIATION_TYPE.get(assoc_type, "Unknown")
-        ds_mode = vlan.attributes.get("Downstream mode", 0)
-        ds_mode_desc = get_downstream_semantic(ds_mode)
-
-        # --- Path Info ---
-        main_table.add_row(
-            str(inst_id),
-            sub_table,
-            f"{assoc_type_desc}\n{assoc_ptr}\n[dim]Mode: {ds_mode_desc}[/]",
+        vlan_data_list.append(
+            {
+                "inst_id": vlan.inst_id,
+                "rules": rules,
+                "assoc_ptr": attrs.get("Associated ME pointer", "N/A"),
+                "assoc_type": ME_171_ASSOCIATION_TYPE.get(
+                    attrs.get("Association type", -1), "Unknown"
+                ),
+                "ds_mode": get_downstream_semantic(attrs.get("Downstream mode", 0)),
+            }
         )
 
-    console.print(main_table)
+    if json_output:
+        print(json.dumps(vlan_data_list, indent=2))
+    else:
+        from .omcirich import render_vlan_table
+
+        render_vlan_table(vlan_data_list)
 
 
 def run_tcont_flow(pcap):
@@ -480,7 +445,9 @@ def main():
 
     # --- Sub-command: vlan_tbl ---
     vlan_p = subparsers.add_parser(
-        "vlan_tbl", help="Analye OMCI VLAN tagging logic (Table-driven)"
+        "vlan_tbl",
+        parents=[common_args],
+        help="Analye OMCI VLAN tagging logic (Table-driven)",
     )
     vlan_p.add_argument("pcap", help="Path to pcap file")
 
@@ -507,7 +474,7 @@ def main():
     elif args.command == "graphic":
         run_omcigraph(args.pcap)
     elif args.command == "vlan_tbl":
-        run_omcivlan(args.pcap)
+        run_omcivlan(args.pcap, json_output=args.json_output)
     elif args.command == "tcont_flow":
         run_tcont_flow(args.pcap)
     else:

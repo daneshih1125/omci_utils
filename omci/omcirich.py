@@ -8,9 +8,13 @@
 from rich.console import Console
 from rich.table import Table
 from rich import box
+from rich.text import Text
 
 
 def render_check_table(check_result):
+    """
+    Renders the OMCI packet consistency check results in a formatted table.
+    """
 
     pkts = check_result.get("packets", [])
     summary = check_result.get("summary", {})
@@ -73,3 +77,57 @@ def render_check_table(check_result):
         f"{summary['transaction_id_duplicate_count']} duplicate packets, "
         f"{summary['resp_late_count']} late packets\n"
     )
+
+
+def render_vlan_table(vlan_data_list):
+    """
+    Renders the OMCI VLAN Logic Analysis table (ME 171).
+    - Decodes nested VLAN tagging operation rules.
+    - Displays association pointers and downstream modes.
+    """
+
+    console = Console()
+    if not vlan_data_list:
+        console.print("[yellow]No VLAN (ME 171) instances found.[/]")
+        return
+
+    main_table = Table(
+        title="[bold white]OMCI VLAN Logic Analyzer[/]",
+        box=box.ROUNDED,
+        header_style="bold magenta",
+        show_lines=True,
+        expand=True,
+    )
+
+    main_table.add_column("ME inst ID", justify="center", style="cyan", width=12)
+    main_table.add_column("VLAN Rules (Sub-Table)", width=75)
+    main_table.add_column("Association / Mode", justify="center", width=20)
+
+    for vlan in vlan_data_list:
+        # --- Sub-Table for VLAN rules ---
+        sub_table = Table(box=box.SIMPLE, header_style="italic yellow", expand=True)
+        sub_table.add_column("Idx", width=4, justify="center")
+        sub_table.add_column("Action / Semantic", width=25)
+        sub_table.add_column("Detailed Bit-Fields (Filter / Treatment / Tags Removed )")
+
+        for idx, rule in enumerate(vlan["rules"]):
+            d = rule["data"]
+            bit_info = (
+                f"[dim]F:[/] [cyan]O:{d['f_out_prio']}/{d['f_out_vid']} I:{d['f_in_prio']}/{d['f_in_vid']} E:{d['f_eth_type']}[/] "
+                f"[dim]T:[/] [yellow]O:{d['t_out_prio']}/{d['t_out_vid']} I:{d['t_in_prio']}/{d['t_in_vid']}[/] "
+                f"[magenta]R:{d['t_tags_rem']}[/]"
+            )
+
+            sub_table.add_row(
+                Text(str(idx), style="bold red"),
+                Text(rule["action_type"], style="bold green"),
+                bit_info,
+            )
+
+        main_table.add_row(
+            str(vlan["inst_id"]),
+            sub_table,
+            f"{vlan['assoc_type']}\n{vlan['assoc_ptr']}\n[dim]Mode: {vlan['ds_mode']}[/]",
+        )
+
+    console.print(main_table)
