@@ -438,8 +438,8 @@ def main():
     vlan_p.add_argument("pcap", help="Path to pcap file")
 
     # --- Sub-command: tcont_flow ---
-    vlan_p = subparsers.add_parser("tcont_flow", help="Trace T-CONT -> GEM -> PQ traffic hierarchy")
-    vlan_p.add_argument("pcap", help="Path to pcap file")
+    tcont_p = subparsers.add_parser("tcont_flow", help="Trace T-CONT -> GEM -> PQ traffic hierarchy")
+    tcont_p.add_argument("pcap", help="Path to pcap file")
 
     args = parser.parse_args()
 

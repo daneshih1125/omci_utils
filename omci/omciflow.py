@@ -43,7 +43,7 @@ def show_tcont_speed_flow(mib_db):
     for tcont in tconts:
         alloc_id = tcont.attributes.get('Alloc-ID', 0xFFFF)
         # Unassigned Alloc-ID
-        alloc_str = f"alloc-id={alloc_id}" if alloc_id != 0xFFFF else "[dim]Unassigned[/dim]"
+        alloc_str = "[dim]Unassigned[/dim]" if alloc_id == 0xFFFF or alloc_id == 0xFF else f"alloc-id={alloc_id}"
         t_node = flow_tree.add(f"[bold magenta]T-CONT {tcont.inst_id}[/bold magenta] ({alloc_str})")
 
         # Find gems pointer to T-CONT
@@ -76,6 +76,6 @@ def show_tcont_speed_flow(mib_db):
 
             gem_node = t_node.add(f"[bold yellow]GEM {gem_id}[/bold yellow]")
             gem_node.add(f"[bold cyan][US][/bold cyan] PQ {up_pq_ptr} → up:{up_bw}")
-            gem_node.add(f"[bold green][DS][/bold green] PQ {ds_pq_ptr} → Priority {ds_prio} dn:{dn_bw}")
+            gem_node.add(f"[bold green][DS][/bold green] PQ {ds_pq_ptr} → {ds_prio} dn:{dn_bw}")
 
     console.print(flow_tree)

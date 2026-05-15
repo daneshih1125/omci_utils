@@ -418,7 +418,7 @@ def test_cmd_tcont_flow():
 
     pattern = (
         r"GEM\s+1001.*.\[US\]\s+PQ 32775 → up:CIR=0.128Mbps/PIR=9953.28Mbps"
-        r".*.\[DS\] PQ 0 → Priority Priority 0 dn:Unrestricted"
+        r".*.\[DS\] PQ 0 → Priority 0 dn:Unrestricted"
     )
 
     assert re.search(pattern, result.stdout, re.DOTALL), (
@@ -427,7 +427,7 @@ def test_cmd_tcont_flow():
 
     pattern = (
         r"GEM\s+1002.*.\[US\]\s+PQ 32768 → up:CIR=0.128Mbps/PIR=100Mbps"
-        r".*.\[DS\] PQ 6 → Priority Priority 6 dn:Unrestricted"
+        r".*.\[DS\] PQ 6 → Priority 6 dn:Unrestricted"
     )
 
     assert re.search(pattern, result.stdout, re.DOTALL), (
