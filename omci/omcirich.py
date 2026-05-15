@@ -9,6 +9,7 @@ from rich.console import Console
 from rich.table import Table
 from rich import box
 from rich.text import Text
+from rich.tree import Tree
 
 
 def render_check_table(check_result):
@@ -131,3 +132,50 @@ def render_vlan_table(vlan_data_list):
         )
 
     console.print(main_table)
+
+
+def render_tcont_flow_tree(flow_data):
+    """
+    Renders the GPON T-CONT -> GEM -> PQ hierarchy using a Rich Tree.
+    This replaces the old direct-to-console logic.
+    """
+    console = Console()
+    if not flow_data:
+        console.print("[red]No T-CONT flow data found to render.[/red]")
+        return
+
+    # Create the root of the tree
+    flow_tree = Tree("[bold cyan]GPON T-CONT Flow Analysis[/bold cyan]")
+
+    for tcont in flow_data:
+        # Handle unassigned Alloc-ID (which we set to None in get_tcont_flow_data)
+        alloc_id = tcont.get("alloc_id")
+        alloc_str = (
+            f"alloc-id={alloc_id}" if alloc_id is not None else "[dim]Unassigned[/dim]"
+        )
+
+        # Add T-CONT node
+        t_node = flow_tree.add(
+            f"[bold magenta]T-CONT {tcont['tcont_id']}[/bold magenta] ({alloc_str})"
+        )
+
+        for gem in tcont.get("gem_ports", []):
+            # Add GEM node
+            gem_id = gem.get("gem_port_id", "N/A")
+            gem_node = t_node.add(f"[bold yellow]GEM {gem_id}[/bold yellow]")
+
+            # Add Upstream (US) details
+            us = gem.get("upstream", {})
+            gem_node.add(
+                f"[bold cyan][US][/bold cyan] PQ {us.get('pq_ptr')} → up:{us.get('bandwidth')}"
+            )
+
+            # Add Downstream (DS) details
+            ds = gem.get("downstream", {})
+            prio = ds.get("priority")
+            prio_str = f"Priority {prio}" if prio is not None else "Priority Unknown"
+            gem_node.add(
+                f"[bold green][DS][/bold green] PQ {ds.get('pq_ptr')} → {prio_str} dn:{ds.get('bandwidth')}"
+            )
+
+    console.print(flow_tree)

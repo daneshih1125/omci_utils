@@ -286,3 +286,94 @@ def test_cmd_vlan_json_output():
     }
 
     assert rule_3["data"] == expected_r3_data, "Rule 3 data dictionary mismatch"
+
+
+def test_cmd_tcont_flow_json_output():
+    """
+    Verify 'omcipcap tcont_flow --json-output' produces valid JSON and
+    correctly maps T-CONT -> GEM -> PQ hierarchy with descriptive error messages.
+    """
+    result = subprocess.run(
+        [
+            "omcipcap",
+            "tcont_flow",
+            "--json-output",
+            "single_unit_1_tont_2_gem.pcap",
+        ],
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+
+    try:
+        output = json.loads(result.stdout)
+    except json.JSONDecodeError as e:
+        pytest.fail(f"stdout is not valid JSON\n{e}\n\nstdout:\n{result.stdout}")
+
+    assert isinstance(output, list), (
+        f"Expected JSON list, but got {type(output).__name__}"
+    )
+    assert len(output) == 2, f"should have 2 T-CONT, but got {len(output)} T-CONT"
+
+    tcont_32768 = next((t for t in output if t["tcont_id"] == 32768), None)
+    assert tcont_32768 is not None, "T-CONT with inst_id 32768 not found in output"
+    assert tcont_32768["alloc_id"] == 1000, (
+        f"Expected Alloc-ID 1000 for T-CONT 32768, but got {tcont_32768['alloc_id']}"
+    )
+    assert len(tcont_32768["gem_ports"]) == 2, (
+        f"T-CONT 32768 should have 2 GEM ports, found {len(tcont_32768['gem_ports'])}"
+    )
+
+    gem_1001 = next(
+        (g for g in tcont_32768["gem_ports"] if g["gem_port_id"] == 1001), None
+    )
+    assert gem_1001 is not None, "GEM Port 1001 not found under T-CONT 32768"
+
+    assert gem_1001["upstream"]["pq_ptr"] == 32775, (
+        f"GEM 1001 Upstream PQ mismatch: expected 32775, got {gem_1001['upstream']['pq_ptr']}"
+    )
+    assert "CIR=0.128Mbps/PIR=9953.28Mbps" in gem_1001["upstream"]["bandwidth"], (
+        f"GEM 1001 US Bandwidth error: {gem_1001['upstream']['bandwidth']}"
+    )
+
+    assert gem_1001["downstream"]["pq_ptr"] == 0, (
+        f"GEM 1001 Downstream PQ mismatch: expected 0, got {gem_1001['downstream']['pq_ptr']}"
+    )
+    assert gem_1001["downstream"]["priority"] == 0, (
+        f"GEM 1001 Downstream Priority mismatch: expected 0, got {gem_1001['downstream']['priority']}"
+    )
+    assert gem_1001["downstream"]["bandwidth"] == "Unrestricted", (
+        f"GEM 1001 DS Bandwidth should be Unrestricted, got {gem_1001['downstream']['bandwidth']}"
+    )
+
+    gem_1002 = next(
+        (g for g in tcont_32768["gem_ports"] if g["gem_port_id"] == 1002), None
+    )
+    assert gem_1002 is not None, "GEM Port 1002 not found under T-CONT 32768"
+
+    assert gem_1002["upstream"]["pq_ptr"] == 32768, (
+        f"GEM 1002 Upstream PQ mismatch: expected 32768, got {gem_1002['upstream']['pq_ptr']}"
+    )
+
+    assert "CIR=0.128Mbps/PIR=100Mbps" in gem_1002["upstream"]["bandwidth"], (
+        f"GEM 1002 US Bandwidth error: {gem_1002['upstream']['bandwidth']}"
+    )
+
+    assert gem_1002["downstream"]["pq_ptr"] == 6, (
+        f"GEM 1002 Downstream PQ mismatch: expected 6, got {gem_1002['downstream']['pq_ptr']}"
+    )
+    assert gem_1002["downstream"]["priority"] == 6, (
+        f"GEM 1002 Downstream Priority mismatch: expected 6, got {gem_1002['downstream']['priority']}"
+    )
+    assert gem_1002["downstream"]["bandwidth"] == "Unrestricted", (
+        f"GEM 1002 DS Bandwidth should be Unrestricted, got {gem_1002['downstream']['bandwidth']}"
+    )
+
+    tcont_32769 = next((t for t in output if t["tcont_id"] == 32769), None)
+    assert tcont_32769 is not None, "T-CONT 32769 not found"
+    assert tcont_32769["alloc_id"] is None, (
+        f"T-CONT 32769 should have null alloc_id, but got {tcont_32769['alloc_id']}"
+    )
+    assert len(tcont_32769["gem_ports"]) == 0, (
+        f"Unassigned T-CONT 32769 should have 0 GEM ports, found {len(tcont_32769['gem_ports'])}"
+    )

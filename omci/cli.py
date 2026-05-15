@@ -12,13 +12,41 @@ from omci import omcimib
 from omci import omcigrapher
 from omci.omcivlan import VlanTaggingOperation
 from omci.omcimib import ME_171_ASSOCIATION_TYPE
-from omci.omciflow import show_tcont_speed_flow
+from omci.omciflow import get_tcont_flow_data
 import argparse
 import json
 
 
-def is_baseline(pkt):
-    return isinstance(pkt, OMCIBaseline)
+def get_omci_pkts(pcap_path, include_raw=False):
+    """
+    Reads pcap and yields filtered OMCI Baseline packets.
+
+    Args:
+        pcap_path (str): Path to the pcap file.
+
+    Yields:
+        tuple: (packet_no, raw_pkt, omci_pkt)
+    """
+    try:
+        raw_pkts = rdpcap(pcap_path)
+    except Exception as e:
+        print(f"Error reading pcap: {e}")
+        return
+
+    for i, raw_pkt in enumerate(raw_pkts):
+        # Filter for OMCI EtherType (0x88B5)
+        if not raw_pkt.haslayer("Ether") or raw_pkt.getlayer("Ether").type != 0x88B5:
+            continue
+
+        try:
+            raw_data = bytes(raw_pkt.lastlayer())
+            omci_pkt = OMCIPacket.from_raw(raw_data)
+
+            if isinstance(omci_pkt, OMCIBaseline):
+                yield i, omci_pkt, (raw_pkt if include_raw else None)
+
+        except Exception:
+            continue
 
 
 def run_omcicheck(
@@ -28,12 +56,6 @@ def run_omcicheck(
     rtt_threshold=1000,
     json_output=False,
 ):
-    try:
-        raw_pkts = rdpcap(pcap_path)
-    except Exception as e:
-        print(f"Error reading pcap: {e}")
-        return
-
     count_fail = 0
     count_vendor = 0
     count_duplicate = 0
@@ -49,20 +71,7 @@ def run_omcicheck(
         },
     }
 
-    for i, raw_pkt in enumerate(raw_pkts):
-        # Skip non-OMCI packets
-        if not raw_pkt.haslayer("Ether") or raw_pkt.getlayer("Ether").type != 0x88B5:
-            continue
-        raw_data = bytes(raw_pkt.lastlayer())
-        try:
-            omci_pkt = OMCIPacket.from_raw(raw_data)
-        except Exception:
-            continue
-
-        # currently, only support Baseline
-        if not is_baseline(omci_pkt):
-            continue
-
+    for i, omci_pkt, raw_pkt in get_omci_pkts(pcap_path, include_raw=True):
         is_fail = False
         is_vendor = False
         is_duplicate = False
@@ -181,27 +190,7 @@ def load_mib_json(json_path):
 
 def get_mib_snapshot(pcap_path):
     snapshot = {}  # {(class_id, inst_id): MIBInstance}
-
-    try:
-        pkts = rdpcap(pcap_path)
-    except Exception as e:
-        print(f"Error reading {pcap_path}: {e}")
-        return snapshot
-
-    for i, pkt in enumerate(pkts):
-        # Skip non-OMCI packets
-        if not pkt.haslayer("Ether") or pkt.getlayer("Ether").type != 0x88B5:
-            continue
-        raw_data = bytes(pkt.lastlayer())
-        try:
-            omci_pkt = OMCIPacket.from_raw(raw_data)
-        except Exception:
-            continue
-
-        # currently, only support Baseline
-        if not is_baseline(omci_pkt):
-            continue
-
+    for i, omci_pkt, _ in get_omci_pkts(pcap_path):
         mib_entity = omci_pkt.mib_upload_entity
         if mib_entity:
             me_class = mib_entity["me_class"]
@@ -278,26 +267,7 @@ def run_omcidiff(pcap1, pcap2):
 def get_all_mib_db(pcap_path):
     mib_db = {}  # {(class_id, inst_id): MIBInstance}
 
-    try:
-        pkts = rdpcap(pcap_path)
-    except Exception as e:
-        print(f"Error reading {pcap_path}: {e}")
-        return mib_db
-
-    for i, pkt in enumerate(pkts):
-        # Skip non-OMCI packets
-        if not pkt.haslayer("Ether") or pkt.getlayer("Ether").type != 0x88B5:
-            continue
-        raw_data = bytes(pkt.lastlayer())
-        try:
-            omci_pkt = OMCIPacket.from_raw(raw_data)
-        except Exception:
-            continue
-
-        # currently, only support Baseline
-        if not is_baseline(omci_pkt):
-            continue
-
+    for i, omci_pkt, _ in get_omci_pkts(pcap_path):
         mib_entity = omci_pkt.mib_upload_entity
         if mib_entity:
             me_class = mib_entity["me_class"]
@@ -399,9 +369,16 @@ def run_omcivlan(pcap, json_output=False):
         render_vlan_table(vlan_data_list)
 
 
-def run_tcont_flow(pcap):
+def run_tcont_flow(pcap, json_output=False):
     mib_db = get_all_mib_db(pcap)
-    show_tcont_speed_flow(mib_db)
+    flow_data = get_tcont_flow_data(mib_db)
+
+    if json_output:
+        print(json.dumps(flow_data, indent=2))
+    else:
+        from .omcirich import render_tcont_flow_tree
+
+        render_tcont_flow_tree(flow_data)
 
 
 def main():
@@ -452,10 +429,12 @@ def main():
     vlan_p.add_argument("pcap", help="Path to pcap file")
 
     # --- Sub-command: tcont_flow ---
-    vlan_p = subparsers.add_parser(
-        "tcont_flow", help="Trace T-CONT -> GEM -> PQ traffic hierarchy"
+    tcont_p = subparsers.add_parser(
+        "tcont_flow",
+        parents=[common_args],
+        help="Trace T-CONT -> GEM -> PQ traffic hierarchy",
     )
-    vlan_p.add_argument("pcap", help="Path to pcap file")
+    tcont_p.add_argument("pcap", help="Path to pcap file")
 
     args = parser.parse_args()
 
@@ -476,7 +455,7 @@ def main():
     elif args.command == "vlan_tbl":
         run_omcivlan(args.pcap, json_output=args.json_output)
     elif args.command == "tcont_flow":
-        run_tcont_flow(args.pcap)
+        run_tcont_flow(args.pcap, json_output=args.json_output)
     else:
         parser.print_help()
 
