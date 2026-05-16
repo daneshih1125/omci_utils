@@ -1794,6 +1794,18 @@ ME_171_ASSOCIATION_TYPE = {
     12: "EFM bonding group",
 }
 
+ME_171_DOWNSTREAM_MODE = {
+    0: "Inverse (ONU Std)",
+    1: "Transparent (No Change)",
+    2: "Match VID+P -> Inverse (Else: Fwd)",
+    3: "Match VID -> Inverse (Else: Fwd)",
+    4: "Match Pbit -> Inverse (Else: Fwd)",
+    5: "Match VID+P -> Inverse (Else: Drop)",
+    6: "Match VID -> Inverse (Else: Drop)",
+    7: "Match Pbit -> Inverse (Else: Drop)",
+    8: "Block All",
+}
+
 
 def get_me_name(class_id):
     if class_id in ME_CLASS_NAMES:

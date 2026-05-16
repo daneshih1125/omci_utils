@@ -6,47 +6,11 @@
 # See LICENSE file in the project root for full license information.
 
 import os
-from scapy.all import rdpcap
-from omci.omci import OMCIBaseline, OMCIPacket, OmciResult, OmciAction
 from omci import omcimib
 from omci import omcigrapher
-from omci.omcivlan import VlanTaggingOperation
-from omci.omcimib import ME_171_ASSOCIATION_TYPE
-from omci.omciflow import get_tcont_flow_data
+from omci import omciparser
 import argparse
 import json
-
-
-def get_omci_pkts(pcap_path, include_raw=False):
-    """
-    Reads pcap and yields filtered OMCI Baseline packets.
-
-    Args:
-        pcap_path (str): Path to the pcap file.
-
-    Yields:
-        tuple: (packet_no, raw_pkt, omci_pkt)
-    """
-    try:
-        raw_pkts = rdpcap(pcap_path)
-    except Exception as e:
-        print(f"Error reading pcap: {e}")
-        return
-
-    for i, raw_pkt in enumerate(raw_pkts):
-        # Filter for OMCI EtherType (0x88B5)
-        if not raw_pkt.haslayer("Ether") or raw_pkt.getlayer("Ether").type != 0x88B5:
-            continue
-
-        try:
-            raw_data = bytes(raw_pkt.lastlayer())
-            omci_pkt = OMCIPacket.from_raw(raw_data)
-
-            if isinstance(omci_pkt, OMCIBaseline):
-                yield i, omci_pkt, (raw_pkt if include_raw else None)
-
-        except Exception:
-            continue
 
 
 def run_omcicheck(
@@ -56,112 +20,10 @@ def run_omcicheck(
     rtt_threshold=1000,
     json_output=False,
 ):
-    count_fail = 0
-    count_vendor = 0
-    count_duplicate = 0
-    count_late = 0
-    request_timestamps = {}
-    check_result = {
-        "packets": [],
-        "summary": {
-            "resp_fail_count": 0,
-            "is_vendor_me_count": 0,
-            "transaction_id_duplicate_count": 0,
-            "resp_late_count": 0,
-        },
-    }
 
-    for i, omci_pkt, raw_pkt in get_omci_pkts(pcap_path, include_raw=True):
-        is_fail = False
-        is_vendor = False
-        is_duplicate = False
-        is_late = False
-        action_name = ""
-        resp_result = {}
-        rtt = 0
-        status = ""
-
-        # rtt
-        if omci_pkt.is_request:
-            if omci_pkt.transaction_id in request_timestamps:
-                status = "[TID_DUPLICATE]"
-                count_duplicate += 1
-                is_duplicate = True
-            request_timestamps[omci_pkt.transaction_id] = raw_pkt.time
-
-        # Display Non-standard MEs reported by ONU during MIB Upload.
-        mib_entity = omci_pkt.mib_upload_entity
-        if mib_entity:
-            me_class = mib_entity["me_class"]
-            me_inst = mib_entity["me_instance"]
-        else:
-            me_class = omci_pkt.me_class
-            me_inst = omci_pkt.inst_id
-
-        # Display non-standard MEs and non-success responses during OLT provisioning.
-        if omci_pkt.result is not None:
-            res_val = omci_pkt.result
-            resp_result["code"] = res_val
-            if resp_result["code"] != OmciResult.SUCCESS:
-                is_fail = True
-                count_fail += 1
-                resp_result["success"] = False
-                try:
-                    resp_result["text"] = f"Err: {OmciResult(res_val).name}"
-                except ValueError:
-                    resp_result["text"] = "Err: Unknown"
-            else:
-                resp_result["success"] = True
-                resp_result["text"] = "SUCCESS"
-
-            if omci_pkt.transaction_id in request_timestamps:
-                rtt = raw_pkt.time - request_timestamps[omci_pkt.transaction_id]
-                if rtt * 1000 > rtt_threshold:
-                    is_late = True
-                    count_late += 1
-                    status = "[LATE]"
-
-        if (
-            omci_pkt.is_vendor_me
-            or omci_pkt.is_feature_me
-            or omci_pkt.mib_upload_is_vendor
-            or omci_pkt.mib_upload_is_feature
-        ):
-            is_vendor = True
-            count_vendor += 1
-
-        if only_vendor and not is_vendor:
-            continue
-        if only_failed and not is_fail:
-            continue
-
-        me_desc = omcimib.get_me_name(me_class)
-        if is_fail or is_vendor or is_duplicate or is_late:
-            action_name = (
-                omci_pkt.action.name
-                if hasattr(omci_pkt.action, "name")
-                else f"Action({omci_pkt.action})"
-            )
-            check_result["packets"].append(
-                {
-                    "packet_no": i + 1,
-                    "transaction_id": omci_pkt.transaction_id,
-                    "action": action_name,
-                    "me_class": me_class,
-                    "me_instance_id": me_inst,
-                    "me_name": me_desc,
-                    "result": resp_result,
-                    "rtt": float(rtt),
-                    "status": status,
-                    "from_olt": omci_pkt.is_request,
-                }
-            )
-    check_result["summary"] = {
-        "resp_fail_count": count_fail,
-        "is_vendor_me_count": count_vendor,
-        "resp_late_count": count_late,
-        "transaction_id_duplicate_count": count_duplicate,
-    }
+    check_result = omciparser.get_check_results(
+        pcap_path, only_vendor, only_failed, rtt_threshold
+    )
 
     if json_output:
         print(json.dumps(check_result, indent=2))
@@ -171,46 +33,12 @@ def run_omcicheck(
         render_check_table(check_result)
 
 
-def load_mib_json(json_path):
-    """
-    Dynamic loading of external JSON configurations, allowing users to overwritestandard ME definitions
-    or define custom Vendor-specific ME specifications.
-    """
-    if not json_path or not os.path.exists(json_path):
-        return
-    try:
-        with open(json_path, "r", encoding="utf-8") as f:
-            custom_me = json.load(f)
-            for cid, spec in custom_me.items():
-                omcimib.ME_SPEC[int(cid)] = tuple(spec)
-            print(f"[*] Successfully loaded {len(custom_me)} custom ME specs.")
-    except Exception as e:
-        print(f"[!] Error loading MIB JSON: {e}")
-
-
-def get_mib_snapshot(pcap_path):
-    snapshot = {}  # {(class_id, inst_id): MIBInstance}
-    for i, omci_pkt, _ in get_omci_pkts(pcap_path):
-        mib_entity = omci_pkt.mib_upload_entity
-        if mib_entity:
-            me_class = mib_entity["me_class"]
-            me_inst = mib_entity["me_instance"]
-            attr_mask = mib_entity["attr_mask"]
-            attr_data = mib_entity["attr_data"]
-            key = (me_class, me_inst)
-            if key not in snapshot:
-                snapshot[key] = omcimib.MIBInstance(me_class, me_inst)
-            snapshot[key].update(attr_mask, attr_data)
-
-    return snapshot
-
-
 def run_omcidiff(pcap1, pcap2):
     print(f"[*] Analyzing MIB from {pcap1}...")
-    mib1 = get_mib_snapshot(pcap1)
+    mib1 = omciparser.get_mib_snapshot(pcap1)
 
     print(f"[*] Analyzing MIB from {pcap2}...")
-    mib2 = get_mib_snapshot(pcap2)
+    mib2 = omciparser.get_mib_snapshot(pcap2)
 
     all_keys = sorted(set(mib1.keys()) | set(mib2.keys()))
     print(
@@ -264,114 +92,29 @@ def run_omcidiff(pcap1, pcap2):
     print("-" * 120)
 
 
-def get_all_mib_db(pcap_path):
-    mib_db = {}  # {(class_id, inst_id): MIBInstance}
-
-    for i, omci_pkt, _ in get_omci_pkts(pcap_path):
-        mib_entity = omci_pkt.mib_upload_entity
-        if mib_entity:
-            me_class = mib_entity["me_class"]
-            me_inst = mib_entity["me_instance"]
-            attr_mask = mib_entity["attr_mask"]
-            attr_data = mib_entity["attr_data"]
-            key = (me_class, me_inst)
-
-            if key not in mib_db:
-                mib_db[key] = omcimib.MIBInstance(me_class, me_inst)
-            mib_db[key].update(attr_mask, attr_data)
-            continue
-
-        if not omci_pkt.is_request:
-            continue
-
-        me_class = omci_pkt.me_class
-        me_inst = omci_pkt.inst_id
-        key = (me_class, me_inst)
-        if omci_pkt.action == OmciAction.CREATE:
-            if key not in mib_db:
-                mib_db[key] = omcimib.MIBInstance(me_class, me_inst)
-            mib_db[key].update_from_create(omci_pkt.content)
-        elif omci_pkt.action == OmciAction.SET:
-            if key in mib_db:
-                attr_mask = int.from_bytes(omci_pkt.content[:2], byteorder="big")
-                attr_data = omci_pkt.content[2:]
-                mib_db[key].update(attr_mask, attr_data)
-
-    return mib_db
-
-
-def get_instances_by_class(mib_db, target_class_id):
-    matched = [inst for k, inst in mib_db.items() if k[0] == target_class_id]
-    matched.sort(key=lambda x: x.inst_id)
-
-    return matched
-
-
 def run_omcigraph(pcap):
     print(f"[*] Analyzing MIB from {pcap}...")
-    mib_db = get_all_mib_db(pcap)
+    mib_db = omciparser.get_all_mib_db(pcap)
     html_content = omcigrapher.export_to_html(mib_db)
     with open("output.html", "w", encoding="utf-8") as f:
         f.write(html_content)
 
 
-def get_downstream_semantic(mode):
-    mapping = {
-        0: "Inverse (ONU Std)",
-        1: "Transparent (No Change)",
-        2: "Match VID+P -> Inverse (Else: Fwd)",
-        3: "Match VID -> Inverse (Else: Fwd)",
-        4: "Match Pbit -> Inverse (Else: Fwd)",
-        5: "Match VID+P -> Inverse (Else: Drop)",
-        6: "Match VID -> Inverse (Else: Drop)",
-        7: "Match Pbit -> Inverse (Else: Drop)",
-        8: "Block All",
-    }
-    return mapping.get(mode, f"M{mode}?")
-
-
 def run_omcivlan(pcap, json_output=False):
-    mib_db = get_all_mib_db(pcap)
-    vlan_db = get_instances_by_class(mib_db, 171)
-    vlan_data_list = []
-
-    for vlan in vlan_db:
-        attrs = vlan.attributes
-        raw_rows = attrs.get("Received frame VLAN tagging operation table", [])
-        rows = raw_rows if isinstance(raw_rows, list) else [raw_rows]
-
-        rules = []
-        for row_hex in rows:
-            vlan_op = VlanTaggingOperation(row_hex)
-            rules.append(
-                {
-                    "action_type": vlan_op.action_type,
-                    "data": vlan_op.data,
-                }
-            )
-        vlan_data_list.append(
-            {
-                "inst_id": vlan.inst_id,
-                "rules": rules,
-                "assoc_ptr": attrs.get("Associated ME pointer", "N/A"),
-                "assoc_type": ME_171_ASSOCIATION_TYPE.get(
-                    attrs.get("Association type", -1), "Unknown"
-                ),
-                "ds_mode": get_downstream_semantic(attrs.get("Downstream mode", 0)),
-            }
-        )
+    mib_db = omciparser.get_all_mib_db(pcap)
+    vlan_data = omciparser.get_vlan_data(mib_db)
 
     if json_output:
-        print(json.dumps(vlan_data_list, indent=2))
+        print(json.dumps(vlan_data, indent=2))
     else:
         from .omcirich import render_vlan_table
 
-        render_vlan_table(vlan_data_list)
+        render_vlan_table(vlan_data)
 
 
 def run_tcont_flow(pcap, json_output=False):
-    mib_db = get_all_mib_db(pcap)
-    flow_data = get_tcont_flow_data(mib_db)
+    mib_db = omciparser.get_all_mib_db(pcap)
+    flow_data = omciparser.get_flow_data(mib_db)
 
     if json_output:
         print(json.dumps(flow_data, indent=2))
@@ -381,6 +124,23 @@ def run_tcont_flow(pcap, json_output=False):
         render_tcont_flow_tree(flow_data)
 
 
+def load_mib_json(json_path):
+    """
+    Dynamic loading of external JSON configurations, allowing users to overwritestandard ME definitions
+    or define custom Vendor-specific ME specifications.
+    """
+    if not json_path or not os.path.exists(json_path):
+        return
+    try:
+        with open(json_path, "r", encoding="utf-8") as f:
+            custom_me = json.load(f)
+            for cid, spec in custom_me.items():
+                omcimib.ME_SPEC[int(cid)] = tuple(spec)
+            print(f"[*] Successfully loaded {len(custom_me)} custom ME specs.")
+    except Exception as e:
+        print(f"[!] Error loading MIB JSON: {e}")
+
+
 def main():
     parser = argparse.ArgumentParser(
         prog="omcipcap", description="OMCI PCAP Diagnostic & Analysis Tool"
@@ -388,7 +148,7 @@ def main():
 
     common_args = argparse.ArgumentParser(add_help=False)
     common_args.add_argument(
-        "--json-output", action="store_true", help="Output results in JSON format"
+        "-j", "--json-output", action="store_true", help="Output results in JSON format"
     )
 
     subparsers = parser.add_subparsers(

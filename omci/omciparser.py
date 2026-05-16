@@ -1,0 +1,351 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+#
+# Copyright (c) 2026 Dong-Yuan Shih <daneshih1125@gmail.com>
+# Licensed under the MIT License.
+# See LICENSE file in the project root for full license information.
+
+from scapy.all import rdpcap
+from omci import omcimib
+from omci import omciflow
+from omci import omcivlan
+from omci.omci import OMCIBaseline, OMCIPacket, OmciAction, OmciResult
+
+
+def get_omci_pkts(pcap_path, include_raw=False):
+    """
+    Reads pcap and yields filtered OMCI Baseline packets.
+
+    Args:
+        pcap_path (str): Path to the pcap file.
+
+    Yields:
+        tuple: (packet_no, omci_pkt, raw_pkt)
+    """
+    try:
+        raw_pkts = rdpcap(pcap_path)
+    except Exception as e:
+        print(f"Error reading pcap: {e}")
+        return
+
+    for i, raw_pkt in enumerate(raw_pkts):
+        # Filter for OMCI EtherType (0x88B5)
+        if not raw_pkt.haslayer("Ether") or raw_pkt.getlayer("Ether").type != 0x88B5:
+            continue
+
+        try:
+            raw_data = bytes(raw_pkt.lastlayer())
+            omci_pkt = OMCIPacket.from_raw(raw_data)
+
+            if isinstance(omci_pkt, OMCIBaseline):
+                yield i, omci_pkt, (raw_pkt if include_raw else None)
+
+        except Exception:
+            continue
+
+
+def get_all_mib_db(pcap_path):
+    """
+    Parses a PCAP file to build a comprehensive MIB database representing the final state.
+
+    This function processes both the initial 'MIB Upload' phase and subsequent
+    'OLT Provisioning' (Create/Set actions) to capture dynamic changes in
+    Managed Entities (MEs).
+
+    Args:
+        pcap_path (str): The file path to the PCAP containing OMCI traffic.
+
+    Returns:
+        dict: A dictionary mapping (class_id, inst_id) tuples to MIBInstance objects,
+              reflecting the most up-to-date state of the ONU.
+    """
+    mib_db = {}  # {(class_id, inst_id): MIBInstance}
+
+    for i, omci_pkt, _ in get_omci_pkts(pcap_path):
+        mib_entity = omci_pkt.mib_upload_entity
+        if mib_entity:
+            me_class = mib_entity["me_class"]
+            me_inst = mib_entity["me_instance"]
+            attr_mask = mib_entity["attr_mask"]
+            attr_data = mib_entity["attr_data"]
+            key = (me_class, me_inst)
+
+            if key not in mib_db:
+                mib_db[key] = omcimib.MIBInstance(me_class, me_inst)
+            mib_db[key].update(attr_mask, attr_data)
+            continue
+
+        if not omci_pkt.is_request:
+            continue
+
+        me_class = omci_pkt.me_class
+        me_inst = omci_pkt.inst_id
+        key = (me_class, me_inst)
+        if omci_pkt.action == OmciAction.CREATE:
+            if key not in mib_db:
+                mib_db[key] = omcimib.MIBInstance(me_class, me_inst)
+            mib_db[key].update_from_create(omci_pkt.content)
+        elif omci_pkt.action == OmciAction.SET:
+            if key in mib_db:
+                attr_mask = int.from_bytes(omci_pkt.content[:2], byteorder="big")
+                attr_data = omci_pkt.content[2:]
+                mib_db[key].update(attr_mask, attr_data)
+
+    return mib_db
+
+
+def get_mib_snapshot(pcap_path):
+    """
+    Captures a snapshot of the MIB database immediately after the MIB Upload phase.
+
+    This function filters only for MIB Upload Next responses, effectively
+    representing the ONU's initial configuration before any OLT provisioning
+    actions (such as Create or Set) occur.
+
+    Args:
+        pcap_path (str): The file path to the PCAP containing OMCI traffic.
+
+    Returns:
+        dict: A dictionary mapping (class_id, inst_id) tuples to MIBInstance objects,
+              representing the static initial MIB image.
+    """
+    snapshot = {}  # {(class_id, inst_id): MIBInstance}
+
+    for i, omci_pkt, _ in get_omci_pkts(pcap_path):
+        mib_entity = omci_pkt.mib_upload_entity
+        if mib_entity:
+            me_class = mib_entity["me_class"]
+            me_inst = mib_entity["me_instance"]
+            attr_mask = mib_entity["attr_mask"]
+            attr_data = mib_entity["attr_data"]
+            key = (me_class, me_inst)
+            if key not in snapshot:
+                snapshot[key] = omcimib.MIBInstance(me_class, me_inst)
+            snapshot[key].update(attr_mask, attr_data)
+
+    return snapshot
+
+
+def get_check_results(
+    pcap_path, only_vendor=False, only_failed=False, rtt_threshold=1000
+):
+    """
+    Analyzes OMCI traffic to identify protocol anomalies and vendor-specific configurations.
+
+    This function performs a comprehensive check on the PCAP file, detecting:
+    1. Response Failures: Non-success results from the ONU.
+    2. Late Responses: ONU responses exceeding the specified RTT threshold.
+    3. Duplicate TIDs: Reused Transaction IDs in requests.
+    4. Vendor-Specific MEs: Non-standard Managed Entities.
+
+    Args:
+        pcap_path (str): Path to the PCAP file.
+        only_vendor (bool): If True, filters results to only include vendor-specific MEs.
+        only_failed (bool): If True, filters results to only include failed responses.
+        rtt_threshold (int): Round-trip time threshold in milliseconds (default 1000ms).
+
+    Returns:
+        dict: A dictionary containing:
+            - "packets": List of dictionaries, each describing a flagged OMCI packet.
+            - "summary": Statistical counts of detected failures, late responses,
+                         vendor MEs, and duplicate TIDs.
+    """
+    count_fail = 0
+    count_vendor = 0
+    count_duplicate = 0
+    count_late = 0
+    request_timestamps = {}
+    check_result = {
+        "packets": [],
+        "summary": {
+            "resp_fail_count": 0,
+            "is_vendor_me_count": 0,
+            "transaction_id_duplicate_count": 0,
+            "resp_late_count": 0,
+        },
+    }
+
+    for i, omci_pkt, raw_pkt in get_omci_pkts(pcap_path, include_raw=True):
+        is_fail = False
+        is_vendor = False
+        is_duplicate = False
+        is_late = False
+        action_name = ""
+        resp_result = {}
+        rtt = 0
+        status = ""
+
+        # rtt
+        if omci_pkt.is_request:
+            if omci_pkt.transaction_id in request_timestamps:
+                status = "[TID_DUPLICATE]"
+                count_duplicate += 1
+                is_duplicate = True
+            request_timestamps[omci_pkt.transaction_id] = raw_pkt.time
+
+        # Display Non-standard MEs reported by ONU during MIB Upload.
+        mib_entity = omci_pkt.mib_upload_entity
+        if mib_entity:
+            me_class = mib_entity["me_class"]
+            me_inst = mib_entity["me_instance"]
+        else:
+            me_class = omci_pkt.me_class
+            me_inst = omci_pkt.inst_id
+
+        # Display non-standard MEs and non-success responses during OLT provisioning.
+        if omci_pkt.result is not None:
+            res_val = omci_pkt.result
+            resp_result["code"] = res_val
+            if resp_result["code"] != OmciResult.SUCCESS:
+                is_fail = True
+                count_fail += 1
+                resp_result["success"] = False
+                try:
+                    resp_result["text"] = f"Err: {OmciResult(res_val).name}"
+                except ValueError:
+                    resp_result["text"] = "Err: Unknown"
+            else:
+                resp_result["success"] = True
+                resp_result["text"] = "SUCCESS"
+
+            if omci_pkt.transaction_id in request_timestamps:
+                rtt = raw_pkt.time - request_timestamps[omci_pkt.transaction_id]
+                if rtt * 1000 > rtt_threshold:
+                    is_late = True
+                    count_late += 1
+                    status = "[LATE]"
+
+        if (
+            omci_pkt.is_vendor_me
+            or omci_pkt.is_feature_me
+            or omci_pkt.mib_upload_is_vendor
+            or omci_pkt.mib_upload_is_feature
+        ):
+            is_vendor = True
+            count_vendor += 1
+
+        if only_vendor and not is_vendor:
+            continue
+        if only_failed and not is_fail:
+            continue
+
+        me_desc = omcimib.get_me_name(me_class)
+        if is_fail or is_vendor or is_duplicate or is_late:
+            action_name = (
+                omci_pkt.action.name
+                if hasattr(omci_pkt.action, "name")
+                else f"Action({omci_pkt.action})"
+            )
+            check_result["packets"].append(
+                {
+                    "packet_no": i + 1,
+                    "transaction_id": omci_pkt.transaction_id,
+                    "action": action_name,
+                    "me_class": me_class,
+                    "me_instance_id": me_inst,
+                    "me_name": me_desc,
+                    "result": resp_result,
+                    "rtt": float(rtt),
+                    "status": status,
+                    "from_olt": omci_pkt.is_request,
+                }
+            )
+    check_result["summary"] = {
+        "resp_fail_count": count_fail,
+        "is_vendor_me_count": count_vendor,
+        "resp_late_count": count_late,
+        "transaction_id_duplicate_count": count_duplicate,
+    }
+
+    return check_result
+
+
+def get_flow_data(mib_db):
+    """
+    Extracts the T-CONT traffic hierarchy from the provided MIB database.
+
+    This function serves as a wrapper to analyze the relationships between
+    T-CONTs, GEM Ports, and Priority Queues based on the current MIB state.
+
+    Args:
+        mib_db (dict): The MIB database containing Managed Entity instances.
+
+    Returns:
+        dict/list: A structured representation of the traffic flow hierarchy
+                   processed by the omciflow module.
+    """
+    return omciflow.get_tcont_flow_data(mib_db)
+
+
+def get_vlan_data(mib_db):
+    """
+    Extracts and parses VLAN tagging configurations from the MIB database.
+
+    This function specifically targets Managed Entity (ME) 171 (VLAN Tagging
+    Filter Data). It decodes the complex table-driven tagging operations,
+    association pointers, and downstream operating modes.
+
+    Args:
+        mib_db (dict): The MIB database containing Managed Entity instances.
+
+    Returns:
+        list: A list of dictionaries, each representing a VLAN tagging configuration:
+            - "inst_id": The Instance ID of the ME 171.
+            - "rules": A list of parsed rules containing action types and raw data.
+            - "assoc_ptr": Pointer to the associated ME (e.g., ANI-G or PPTP).
+            - "assoc_type": Decoded association type description.
+            - "ds_mode": Decoded downstream operating mode.
+    """
+
+    vlan_data = []
+    vlan_db = get_instances_by_class(mib_db, 171)
+    for vlan in vlan_db:
+        attrs = vlan.attributes
+        raw_rows = attrs.get("Received frame VLAN tagging operation table", [])
+        rows = raw_rows if isinstance(raw_rows, list) else [raw_rows]
+
+        rules = []
+        for row_hex in rows:
+            vlan_op = omcivlan.VlanTaggingOperation(row_hex)
+            rules.append(
+                {
+                    "action_type": vlan_op.action_type,
+                    "data": vlan_op.data,
+                }
+            )
+        vlan_data.append(
+            {
+                "inst_id": vlan.inst_id,
+                "rules": rules,
+                "assoc_ptr": attrs.get("Associated ME pointer", "N/A"),
+                "assoc_type": omcimib.ME_171_ASSOCIATION_TYPE.get(
+                    attrs.get("Association type", -1), "Unknown"
+                ),
+                "ds_mode": omcimib.ME_171_DOWNSTREAM_MODE.get(
+                    attrs.get("Downstream mode", 0), "Unknown"
+                ),
+            }
+        )
+
+    return vlan_data
+
+
+def get_instances_by_class(mib_db, target_class_id):
+    """
+    Retrieves all Managed Entity instances belonging to a specific Class ID.
+
+    The returned list is sorted by Instance ID to ensure deterministic output
+    and easier analysis.
+
+    Args:
+        mib_db (dict): The MIB database to search.
+        target_class_id (int): The OMCI Class ID to filter by (e.g., 84 for
+                               VLAN Tagging Filter Data).
+
+    Returns:
+        list: A sorted list of MIBInstance objects matching the target Class ID.
+    """
+    matched = [inst for k, inst in mib_db.items() if k[0] == target_class_id]
+    matched.sort(key=lambda x: x.inst_id)
+
+    return matched

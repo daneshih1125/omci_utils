@@ -9,7 +9,21 @@ from omci.omcimib import OMCIClass
 
 
 def get_bw_info(mib_db, descriptor_ptr):
-    """Get BW (Mbps) from Traffic Descriptor (280)"""
+    """
+    Extracts bandwidth information (Mbps) from a Traffic Descriptor entity.
+
+    Calculates CIR and PIR based on the Traffic Descriptor (Class ID 280)
+    attributes retrieved from the MIB database.
+
+    Args:
+        mib_db (dict): The MIB database containing Managed Entity instances.
+        descriptor_ptr (int): Pointer to the Traffic Descriptor instance.
+
+    Returns:
+        str: A formatted string representing bandwidth (e.g., 'CIR=10Mbps/PIR=100Mbps'),
+             'Unrestricted' if the pointer is invalid, or 'Factory Policy'
+             if rates are zero.
+    """
 
     if (
         not descriptor_ptr
@@ -33,11 +47,19 @@ def get_bw_info(mib_db, descriptor_ptr):
 
 def get_tcont_flow_data(mib_db):
     """
-    Analyzes the GPON T-CONT -> GEM -> PQ hierarchy and returns a structured list.
+    Extracts the T-CONT traffic hierarchy from the provided MIB database.
+
+    This function serves as a wrapper to analyze the relationships between
+    T-CONTs, GEM Ports, and Priority Queues based on the current MIB state.
+
+    Args:
+        mib_db (dict): The MIB database containing Managed Entity instances.
 
     Returns:
-        list: A list of T-CONT dictionaries containing GEM port details and flow info.
+        dict/list: A structured representation of the traffic flow hierarchy
+                   processed by the omciflow module.
     """
+
     if not mib_db:
         return []
 
