@@ -33,67 +33,21 @@ def run_omcicheck(
         render_check_table(check_result)
 
 
-def run_omcidiff(pcap1, pcap2):
-    print(f"[*] Analyzing MIB from {pcap1}...")
+def run_omcidiff(pcap1, pcap2, json_output=False):
     mib1 = omciparser.get_mib_snapshot(pcap1)
-
-    print(f"[*] Analyzing MIB from {pcap2}...")
     mib2 = omciparser.get_mib_snapshot(pcap2)
 
-    all_keys = sorted(set(mib1.keys()) | set(mib2.keys()))
-    print(
-        f"\n{'ME (Class, Inst)':<35} | {'Attribute':<35} | {'Pcap 1':<20} -> {'Pcap 2'}"
-    )
-    print("-" * 120)
+    diff_data = omciparser.get_mib_diff_data(mib1, mib2)
 
-    for key in all_keys:
-        if key not in mib2:
-            me_name = omcimib.get_me_name(key[0])
-            print(f"\033[91m[REMOVED] {me_name} {key}\033[0m")
-            continue
+    if json_output:
+        print(json.dumps(diff_data, indent=2))
+    else:
+        from .omcirich import render_diff_table
 
-        if key not in mib1:
-            me_name = omcimib.get_me_name(key[0])
-            print(f"\033[92m[NEW]     {me_name} {key}\033[0m")
-            continue
-
-        obj1 = mib1[key]
-        obj2 = mib2[key]
-        me_name = omcimib.get_me_name(key[0])
-
-        if obj1.is_unknown:
-            obj1.vendor_data.sort(key=lambda x: x[0], reverse=True)
-            obj2.vendor_data.sort(key=lambda x: x[0], reverse=True)
-
-            masks1 = [m for m, d in obj1.vendor_data]
-            masks2 = [m for m, d in obj2.vendor_data]
-            if masks1 != masks2:
-                print(
-                    f"[!] {me_name:<20} {str(key):<14} | Mask Mismatch: {masks1} vs {masks2}"
-                )
-            else:
-                for i, (mask, d1) in enumerate(obj1.vendor_data):
-                    d2 = obj2.vendor_data[i][1]
-                    if d1 != d2:
-                        attr_label = f"Vendor Raw (Mask 0x{mask:04X})"
-                        print(
-                            f"[*] {me_name:<20} {str(key):<14} | {attr_label:<35} | {d1:<20} -> {d2}"
-                        )
-        else:
-            for attr, val1 in obj1.attributes.items():
-                val2 = obj2.attributes.get(attr)
-                if val1 != val2:
-                    v1_str = f"0x{val1:x}" if isinstance(val1, int) else f"'{val1}'"
-                    v2_str = f"0x{val2:x}" if isinstance(val2, int) else f"'{val2}'"
-                    print(
-                        f"[*] {me_name:<20} {str(key):<14} | {attr:<35} | {v1_str:<20} -> {v2_str}"
-                    )
-
-    print("-" * 120)
+        render_diff_table(diff_data)
 
 
 def run_omcigraph(pcap):
-    print(f"[*] Analyzing MIB from {pcap}...")
     mib_db = omciparser.get_all_mib_db(pcap)
     html_content = omcigrapher.export_to_html(mib_db)
     with open("output.html", "w", encoding="utf-8") as f:
@@ -136,7 +90,7 @@ def load_mib_json(json_path):
             custom_me = json.load(f)
             for cid, spec in custom_me.items():
                 omcimib.ME_SPEC[int(cid)] = tuple(spec)
-            print(f"[*] Successfully loaded {len(custom_me)} custom ME specs.")
+            # print(f"[*] Successfully loaded {len(custom_me)} custom ME specs.")
     except Exception as e:
         print(f"[!] Error loading MIB JSON: {e}")
 
@@ -168,7 +122,7 @@ def main():
 
     # --- Sub-command: diff ---
     diff_p = subparsers.add_parser(
-        "diff", help="Compare MIB snapshots between two pcaps"
+        "diff", parents=[common_args], help="Compare MIB snapshots between two pcaps"
     )
     diff_p.add_argument("pcap1", help="Baseline pcap")
     diff_p.add_argument("pcap2", help="Target pcap")
@@ -209,7 +163,7 @@ def main():
     elif args.command == "diff":
         if args.mib_json:
             load_mib_json(args.mib_json)
-        run_omcidiff(args.pcap1, args.pcap2)
+        run_omcidiff(args.pcap1, args.pcap2, json_output=args.json_output)
     elif args.command == "graphic":
         run_omcigraph(args.pcap)
     elif args.command == "vlan_tbl":

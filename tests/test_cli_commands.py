@@ -29,6 +29,8 @@ def setup_test_files():
         "mib_omcc_a0.pcap",
         "mib_vendor_v1.pcap",
         "mib_vendor_v2.pcap",
+        "mib_mask_c000.pcap",
+        "mib_mask_8000.pcap",
         "single_unit_1_tont_2_gem.pcap",
         "output.html",
     ]
@@ -122,7 +124,7 @@ def test_cmd_diff():
         check=True,
     )
 
-    pattern = r"\[\*\]\s+Cardholder\s+\(5\, 257\)"
+    pattern = r"MODIFIED\s+Cardholder\s+\(5\)\s+0x101"
 
     assert re.search(pattern, result.stdout), (
         f"\n[Fail] should detect changes in Cardholder ME attributes！\n"
@@ -130,7 +132,7 @@ def test_cmd_diff():
         f"Actual output: {result.stdout.strip()}"
     )
 
-    pattern = r"\[REMOVED\]\s+Cardholder\s+\(5\, 258\)"
+    pattern = r"\-\s+REMOVED\s+Cardholder\s+\(5\)\s+0x102"
 
     assert re.search(pattern, result.stdout), (
         f"\n[Fail] Should detect removed Cardholder ME！\n"
@@ -138,7 +140,7 @@ def test_cmd_diff():
         f"Actual output: {result.stdout.strip()}"
     )
 
-    pattern = r"\[\*\]\s+IP host config data\s+\(134\, 1\)"
+    pattern = r"MODIFIED\s+IP host config data\s+\(134\)\s+0x1"
 
     assert re.search(pattern, result.stdout), (
         f"\n[Fail] should detect changes in ME 134 attributes！\n"
@@ -146,7 +148,7 @@ def test_cmd_diff():
         f"Actual output: {result.stdout.strip()}"
     )
 
-    pattern = r"\[NEW\]\s+T-CONT\s+\(262\, 1\)"
+    pattern = r"\+\s+NEW\s+T-CONT\s+\(262\)\s+0x1"
 
     assert re.search(pattern, result.stdout), (
         f"\n[Fail] Should detect added T-CONT ME！\n"
@@ -161,15 +163,10 @@ def test_cmd_diff():
         check=True,
     )
 
-    expected_diff = (
-        "4847550100000000000000000000000000000000000000000000"
-        " -> "
-        "5346550000000000000000000000000000000000000000000000"
-    )
-
-    assert expected_diff in result.stdout, (
-        f"Diff Result not match!\n"
-        f"Expected: {expected_diff}\n"
+    pattern = r"MODIFIED\s+Reserved for vendor-specific use\s+\(355\)\s+0x0"
+    assert re.search(pattern, result.stdout), (
+        f"\n[Fail] Diff Result not match!\n"
+        f"Expected: {pattern}\n"
         f"Actual output: {result.stdout.strip()}"
     )
 
@@ -187,7 +184,7 @@ def test_cmd_diff():
         check=True,
     )
 
-    pattern = r"CPE mode\s+\|\s+\'HGU\'\s+\-\>\s+\'SFU\'"
+    pattern = r"CPE mode\s+HGU\s+SFU"
 
     assert re.search(pattern, result.stdout), (
         f"\n[Fail] Diff result not correct！\n"
@@ -195,7 +192,27 @@ def test_cmd_diff():
         f"Actual output: {result.stdout.strip()}"
     )
 
-    pattern = r"Support VOIP\s+\|\s+0x1\s+\-\>\s+0x0"
+    pattern = r"Support VOIP\s+0x1\s+0x0"
+
+    assert re.search(pattern, result.stdout), (
+        f"\n[Fail] Diff result not correct！\n"
+        f"Expected: {pattern}\n"
+        f"Actual output: {result.stdout.strip()}"
+    )
+
+    result = subprocess.run(
+        [
+            "omcipcap",
+            "diff",
+            "mib_mask_c000.pcap",
+            "mib_mask_8000.pcap",
+        ],
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+
+    pattern = r"MISMATCH\s+Unknown\s+\(355\)"
 
     assert re.search(pattern, result.stdout), (
         f"\n[Fail] Diff result not correct！\n"

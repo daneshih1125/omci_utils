@@ -14,12 +14,21 @@ import os
 def setup_test_files():
 
     subprocess.run(["python3", "utils/generate_omcicheck_example.py"], check=True)
+    subprocess.run(["python3", "utils/generate_omcidiff_example.py"], check=True)
     subprocess.run(["python3", "utils/generate_dual_gem_shared_tcont.py"], check=True)
 
     yield
 
     test_files = [
         "omcicheck_example.pcap",
+        "mib_before.pcap",
+        "mib_after.pcap",
+        "mib_omcc_96.pcap",
+        "mib_omcc_a0.pcap",
+        "mib_vendor_v1.pcap",
+        "mib_vendor_v2.pcap",
+        "mib_mask_c000.pcap",
+        "mib_mask_8000.pcap",
         "single_unit_1_tont_2_gem.pcap",
     ]
 
@@ -377,3 +386,195 @@ def test_cmd_tcont_flow_json_output():
     assert len(tcont_32769["gem_ports"]) == 0, (
         f"Unassigned T-CONT 32769 should have 0 GEM ports, found {len(tcont_32769['gem_ports'])}"
     )
+
+
+def test_cmd_diff_json_output():
+    """
+    Test the 'diff -j' command to ensure it produces a valid and accurate JSON report.
+    """
+    result = subprocess.run(
+        [
+            "omcipcap",
+            "diff",
+            "-j",
+            "mib_before.pcap",
+            "mib_after.pcap",
+        ],
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+
+    assert result.returncode == 0
+
+    try:
+        data = json.loads(result.stdout)
+    except json.JSONDecodeError as e:
+        pytest.fail(f"stdout is not valid JSON\n{e}\n\nstdout:\n{result.stdout}")
+
+    summary = data.get("summary", {})
+    assert summary["added_count"] == 1
+    assert summary["removed_count"] == 1
+    assert summary["modified_count"] == 2
+    assert summary["unknown_me_mask_mismatch_count"] == 0
+
+    changes = data.get("changes", [])
+    assert len(changes) == 4
+
+    cardholder_mod = next(
+        c for c in changes if c["class_id"] == 5 and c["inst_id"] == 257
+    )
+    assert cardholder_mod["status"] == "modified"
+    assert cardholder_mod["old"] == "0x30"
+    assert cardholder_mod["new"] == "0x31"
+    assert cardholder_mod["attr_name"] == "Actual Plug-in Unit Type"
+
+    ip_host_mod = next(c for c in changes if c["class_id"] == 134)
+    assert ip_host_mod["attr_name"] == "MAC address"
+    assert ip_host_mod["new"] == "C0A8010A0000"
+
+    tcont_add = next(c for c in changes if c["class_id"] == 262)
+    assert tcont_add["status"] == "added"
+    assert tcont_add["me_name"] == "T-CONT"
+
+    cardholder_rem = next(
+        c for c in changes if c["class_id"] == 5 and c["inst_id"] == 258
+    )
+    assert cardholder_rem["status"] == "removed"
+
+
+def test_cmd_diff_vendor_specific_json():
+    """
+    Test 'diff -j' with vendor-specific MEs (Class 355).
+    Verifies that the parser handles unknown MEs using Attribute Masks.
+    """
+
+    result = subprocess.run(
+        [
+            "omcipcap",
+            "diff",
+            "-j",
+            "mib_vendor_v1.pcap",
+            "mib_vendor_v2.pcap",
+        ],
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+
+    assert result.returncode == 0
+
+    try:
+        data = json.loads(result.stdout)
+    except json.JSONDecodeError as e:
+        pytest.fail(f"stdout is not valid JSON\n{e}\n\nstdout:\n{result.stdout}")
+
+    summary = data.get("summary", {})
+    assert summary["modified_count"] == 1
+    assert summary["added_count"] == 0
+    assert summary["removed_count"] == 0
+
+    change = data["changes"][0]
+    assert change["status"] == "modified"
+    assert change["class_id"] == 355
+    assert change["inst_id"] == 0
+
+    assert "Reserved" in change["me_name"]
+
+    assert change["attr_name"] == "Vendor Raw (Mask 0xC000)"
+
+    expected_old = "4847550100000000000000000000000000000000000000000000"
+    expected_new = "5346550000000000000000000000000000000000000000000000"
+    assert change["old"] == expected_old
+    assert change["new"] == expected_new
+
+
+def test_cmd_diff_multiple_vendor_attributes():
+    """
+    Test 'diff -j' when a single vendor-specific ME has multiple attribute changes.
+    Matches the scenario: CPE mode (HGU->SFU) and Support VOIP (0x1->0x0).
+    """
+
+    result = subprocess.run(
+        [
+            "omcipcap",
+            "diff",
+            "-j",
+            "mib_vendor_v1.pcap",
+            "mib_vendor_v2.pcap",
+            "--mib-json",
+            "examples/vendor_355.json",
+        ],
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+
+    assert result.returncode == 0
+
+    try:
+        data = json.loads(result.stdout)
+    except json.JSONDecodeError as e:
+        pytest.fail(f"stdout is not valid JSON\n{e}\n\nstdout:\n{result.stdout}")
+
+    summary = data.get("summary", {})
+    assert summary["modified_count"] == 2
+    assert summary["added_count"] == 0
+    assert summary["removed_count"] == 0
+
+    changes = data.get("changes", [])
+    assert len(changes) == 2
+
+    cpe_mod = next(c for c in changes if c["attr_name"] == "CPE mode")
+    assert cpe_mod["status"] == "modified"
+    assert cpe_mod["class_id"] == 355
+    assert cpe_mod["old"] == "HGU"
+    assert cpe_mod["new"] == "SFU"
+
+    voip_mod = next(c for c in changes if c["attr_name"] == "Support VOIP")
+    assert voip_mod["status"] == "modified"
+    assert voip_mod["old"] == "0x1"
+    assert voip_mod["new"] == "0x0"
+
+    assert cpe_mod["inst_id"] == voip_mod["inst_id"] == 0
+
+
+def test_cmd_diff_mask_mismatch_handling():
+    """
+    Test 'diff -j' when the same Class ID has different attribute masks
+    between two PCAPs (e.g., 0xC000 vs 0x8000).
+    Verifies that the mismatch is caught and reported correctly.
+    """
+
+    result = subprocess.run(
+        [
+            "omcipcap",
+            "diff",
+            "-j",
+            "mib_mask_c000.pcap",
+            "mib_mask_8000.pcap",
+        ],
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+
+    assert result.returncode == 0
+
+    try:
+        data = json.loads(result.stdout)
+    except json.JSONDecodeError as e:
+        pytest.fail(f"stdout is not valid JSON\n{e}\n\nstdout:\n{result.stdout}")
+
+    summary = data.get("summary", {})
+    assert summary["modified_count"] == 0
+    assert summary["unknown_me_mask_mismatch_count"] == 1
+
+    mismatches = data.get("unknown_me_mask_mismatch", [])
+    assert len(mismatches) == 1
+
+    target_mismatch = mismatches[0]
+    assert target_mismatch["class_id"] == 355
+    assert target_mismatch["inst_id"] == 0
+
+    assert len(data.get("changes", [])) == 0

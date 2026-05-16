@@ -330,6 +330,134 @@ def get_vlan_data(mib_db):
     return vlan_data
 
 
+def get_mib_diff_data(mib1, mib2):
+    """
+    Performs a comprehensive comparison between two MIB databases.
+
+    This function identifies added, removed, and modified Managed Entities (MEs).
+    For unknown MEs (Vendor Specific), it performs a deep comparison based on
+    Attribute Masks and raw data hex strings.
+
+    Args:
+        mib1 (dict): The baseline MIB database (source).
+        mib2 (dict): The target MIB database to compare against (destination).
+
+    Returns:
+        dict: A structured dictionary containing:
+            - changes (list): Detailed list of individual attribute variations.
+            - unknown_me_mask_mismatch (list): Instances where the ME definition
+              (attribute layout) differs between the two PCAPs.
+            - summary (dict): Statistical counters for the diff operation.
+    """
+
+    all_keys = sorted(set(mib1.keys()) | set(mib2.keys()))
+
+    diff_data = {
+        "changes": [],
+        "unknown_me_mask_mismatch": [],
+        "summary": {
+            "modified_count": 0,
+            "removed_count": 0,
+            "added_count": 0,
+            "unknown_mismatch_count": 0,
+        },
+    }
+
+    modified_count = 0
+    removed_count = 0
+    added_count = 0
+    unknown_me_mask_mismatch_count = 0
+
+    for key in all_keys:
+        class_id, inst_id = key
+        me_name = omcimib.get_me_name(class_id)
+        if key not in mib2:
+            diff_data["changes"].append(
+                {
+                    "status": "removed",
+                    "me_name": me_name,
+                    "class_id": class_id,
+                    "inst_id": inst_id,
+                }
+            )
+            removed_count += 1
+            continue
+
+        if key not in mib1:
+            diff_data["changes"].append(
+                {
+                    "status": "added",
+                    "me_name": me_name,
+                    "class_id": class_id,
+                    "inst_id": inst_id,
+                }
+            )
+            added_count += 1
+            continue
+
+        obj1 = mib1[key]
+        obj2 = mib2[key]
+
+        if obj1.is_unknown:
+            obj1.vendor_data.sort(key=lambda x: x[0], reverse=True)
+            obj2.vendor_data.sort(key=lambda x: x[0], reverse=True)
+
+            masks1 = [m for m, d in obj1.vendor_data]
+            masks2 = [m for m, d in obj2.vendor_data]
+            if masks1 != masks2:
+                diff_data["unknown_me_mask_mismatch"].append(
+                    {
+                        "class_id": class_id,
+                        "inst_id": inst_id,
+                    }
+                )
+                unknown_me_mask_mismatch_count += 1
+            else:
+                for i, (mask, d1) in enumerate(obj1.vendor_data):
+                    d2 = obj2.vendor_data[i][1]
+                    if d1 != d2:
+                        attr_name = f"Vendor Raw (Mask 0x{mask:04X})"
+                        diff_data["changes"].append(
+                            {
+                                "status": "modified",
+                                "me_name": me_name,
+                                "attr_name": attr_name,
+                                "class_id": class_id,
+                                "inst_id": inst_id,
+                                "old": d1,
+                                "new": d2,
+                            }
+                        )
+                        modified_count += 1
+        else:
+            for attr, val1 in obj1.attributes.items():
+                val2 = obj2.attributes.get(attr)
+                if val1 != val2:
+                    v1_str = f"0x{val1:x}" if isinstance(val1, int) else f"{val1}"
+                    v2_str = f"0x{val2:x}" if isinstance(val2, int) else f"{val2}"
+                    diff_data["changes"].append(
+                        {
+                            "status": "modified",
+                            "me_name": me_name,
+                            "attr_name": attr,
+                            "class_id": class_id,
+                            "inst_id": inst_id,
+                            "old": v1_str,
+                            "new": v2_str,
+                        }
+                    )
+                    modified_count += 1
+
+    diff_data["summary"] = {
+        "removed_count": removed_count,
+        "added_count": added_count,
+        "modified_count": modified_count,
+        "unknown_me_mask_mismatch_count": unknown_me_mask_mismatch_count,
+    }
+
+    return diff_data
+
+
 def get_instances_by_class(mib_db, target_class_id):
     """
     Retrieves all Managed Entity instances belonging to a specific Class ID.
