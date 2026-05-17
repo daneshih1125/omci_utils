@@ -7,10 +7,11 @@
 
 `omcipcap` is a professional GPON/XGS-PON OMCI Semantic Analysis Framework for ITU-T G.988 protocols. By implementing a table-driven semantic engine, it transforms raw pcap data into structured, human-readable insights—covering MIB state auditing, VLAN logic decoding, and T-CONT traffic hierarchy tracing.
 
-## 📊 Output Philosophies
-`omcipcap` is built for both humans and machines:
-- **Rich Visual Tables**: Default output uses `rich` to render beautiful, color-coded tables in your terminal for instant diagnosis.
-- **Structured JSON IR**: All commands support the `-j` or `--json-output` flag, exporting a complete Intermediate Representation (IR) for automation, AI analysis, or integration with other tools.
+## 🌟 Master Branch: AI & Automation Ready
+The **Master** branch represents the latest evolution, shifting from a standalone tool to an analysis framework:
+- **For AI & Programmers**: Full support for **JSON IR** (`-j / --json-output`), making it easy to pipe MIB data into AI models or automation pipelines.
+- **For Field Engineers**: The legacy **v0.2.x-lts** branch remains available for on-site troubleshooting with traditional CLI outputs.
+- **Dual-Mode Output**: Every command supports **Rich Print** (for human diagnosis) and **JSON** (for machine processing).
 
 ## Why Use omcipcap?
 
