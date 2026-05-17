@@ -5,30 +5,12 @@
 [![GitHub Total Downloads](https://img.shields.io/github/downloads/daneshih1125/omcipcap/total?label=github%20total&color=orange)](https://github.com/daneshih1125/omcipcap/releases)
 [![License](https://img.shields.io/github/license/daneshih1125/omcipcap)](https://github.com/daneshih1125/omcipcap/blob/main/LICENSE)
 
-`omcipcap` is a professional Python toolkit designed for analyzing and diagnosing **ITU-T G.988 OMCI** (ONT Management and Control Interface) protocols. It streamlines the process of identifying non-standard Managed Entities (MEs) and provisioning failures in GPON/XGS-PON packet captures, to visualizing network topology, decoding VLAN logic, and tracing upstream T-CONT traffic flows.
+`omcipcap` is a professional GPON/XGS-PON OMCI Semantic Analysis Framework for ITU-T G.988 protocols. By implementing a table-driven semantic engine, it transforms raw pcap data into structured, human-readable insights—covering MIB state auditing, VLAN logic decoding, and T-CONT traffic hierarchy tracing.
 
-
-
-## Key Features
-
-* **`omcipcap check`**: Automatically scans pcap/pcapng files to highlight:
-    * **Vendor-Specific MEs**: Identifies MEs in reserved or proprietary ranges.
-    * **Provisioning Failures**: Detects non-success response codes (e.g., `UNKNOWN_ME`, `INSTANCE_EXISTS`).
-    * **Intelligent Filtering**: Quickly isolate issues using `--only-vendor` or `--only-failed` flags.
-    * **RTT Latency Analysis**: Automatically calculates the time difference between Request and Response. Users can flag slow packets using the --rtt-threshold (default: 1s).
-* **`omcipcap diff`**: is a powerful utility for performing Differential Analysis between two MIB snapshots. It is specifically designed to help firmware engineers identify configuration drifts
-    * **Dynamic ME Extension**: Use the --mib-json flag to dynamically load and overwrite ME definitions. This transforms raw hex data into readable fields without modifying the source code.
-* **`omcipcap graphic`**: generates an interactive, hierarchical network topology from a MIB snapshot. It is designed to visualize the complex logical relationships between Managed Entities (MEs), helping engineers verify provisioning flows from the UNI/Management side to the ANI/T-CONT side.
-* **`omcipcap vlan_tbl`**: Provides a deep-dive analysis of VLAN Tagging Filter Data and VLAN Tagging Operation Configuration Data. It decodes the complex, table-driven logic of OMCI VLAN processing into a human-readable format.
-    * **Logic Reconstruction**: Automatically parses Filter/Treatment bit-fields to visualize how the ONU handles Untagged, Single-tagged, and Double-tagged frames.
-    * **Semantic Mapping**: Translates raw hex values into clear actions (e.g., Insert 1 tag, Modify VID, Discard).
-    * **ME Association**: Links VLAN rules directly to their associated Managed Entities, such as Physical Path Termination Points (PPTP) or MAC Bridge Ports, showing the exact association mode and instance IDs.
-    * **Detailed Bit-Field Breakdown**: Includes a technical view of internal bit-fields (Filter/Treatment/Tags Removed) for senior engineers to verify exact hardware-level logic.
-* **`omcipcap tcont_flow`**: Traces the complete upstream traffic path from T-CONT to GEM ports, displaying Alloc-ID assignment status, associated Priority Queues (upstream/downstream), and traffic shaping parameters in a tree-structured view.
-    * **T-CONT Activation Status**: Instantly identifies unassigned T-CONTs (Alloc-ID = 0xFFFF) versus active ones.
-    * **GEM Port Mapping**: Shows each GEM port bound to the T-CONT with its upstream and downstream Priority Queue linkage.
-    * **Traffic Parameters**: Displays CIR/PIR bandwidth and scheduling policy per Priority Queue for quick QoS verification.
-* **Professional Output**: Features color-coded Terminal output and standardized hex formatting for Instance IDs.
+## 📊 Output Philosophies
+`omcipcap` is built for both humans and machines:
+- **Rich Visual Tables**: Default output uses `rich` to render beautiful, color-coded tables in your terminal for instant diagnosis.
+- **Structured JSON IR**: All commands support the `-j` or `--json-output` flag, exporting a complete Intermediate Representation (IR) for automation, AI analysis, or integration with other tools.
 
 ## Why Use omcipcap?
 
@@ -38,68 +20,36 @@
 
 > **Key Impact**: Transform hour-long manual packet tracing into seconds of automated analysis, allowing engineers to focus on fixing bugs rather than finding them.
 
+## Features
+
+| Command | Description | Output Modes |
+|---|---|---|
+| `check` | Analyze RTT, TID duplicates, and ME failures | Table / JSON |
+| `mibdb` | Dump the Semantic MIB Database | Table / JSON |
+| `mibdb-diff` | Compare two MIBs with semantic decoding | Table / JSON |
+| `vlan-tbl` | Analyze OMCI VLAN tagging logic (Table-driven) | Table / JSON |
+| `tcont-flow` | Trace T-CONT → GEM → PQ traffic hierarchy | Table / JSON |
+| `graphic` | Generate interactive topology HTML | Interactive HTML |
+
+
 
 ## Project Structure
 
 ```text
 .
-├── examples                # pcap and json samples
-│   ├── iphost_graphic.png
-│   ├── mib_after.pcap
-│   ├── mib_before.pcap
-│   ├── mib_omcc_96.pcap
-│   ├── mib_omcc_a0.pcap
-│   ├── mib_vendor_v1.pcap
-│   ├── mib_vendor_v2.pcap
-│   ├── omcicheck_example.pcap
-│   ├── omcicheck_example.png
-│   ├── omcivlan.png
-│   ├── pptp_graphic.png
-│   └── vendor_355.json
-├── LICENSE                 # MIT License
-├── omci                    # Core package
-│   ├── cli.py
-│   ├── __init__.py
-│   ├── omcigrapher.py
-│   ├── omcimib.py
-│   ├── omci.py
-│   └── omcivlan.py
-├── pyproject.toml          # Build system & entry points
-├── README.md               # Project documentation 
-└── tests                   # Test suites & pcap generators
-    ├── generate_omcicheck_example.py
-    ├── generate_omcidiff_example.py
-    └── test_omci_exceptions.py
+├── LICENSE         # MIT License
+├── README.md       # Project documentation
+├── examples        # pcap and json samples
+├── omci            # Core package
+├── pyproject.toml  # Build system & entry points
+├── tests           # Test suites
+└── utils           # pcap generators
+
 ```
 
 ## Installation
-**Option 1: Virtual Environment (Recommended for Development)**
-Use this method to keep your system Python environment clean and isolate dependencies.
 ```bash=
-# 1. Create and activate the virtual environment
-python3 -m venv venv
-source venv/bin/activate
-
-# 2. Upgrade pip and install in editable mode
-pip install --upgrade pip
-pip install -e .
-
-# 3. Verify the installation
-omcipcap --help
-```
-**Option 2: Local Directory Installation (Permanent Use)**
-Use this method to make the tool available across your system without activating a venv.
-```bash=
-# 1. Install to your local directory
-pip install . --prefix=${HOME}
-
-# 2. Update your shell configuration (~/.bashrc or ~/.zshrc)
-export PATH="${HOME}/local/bin:$PATH"
-export PYTHONPATH="${HOME}/local/lib/python3.12/dist-packages:$PYTHONPATH"
-
-# 3. Apply changes
-source ~/.bashrc
-
+pip install omcipcap
 ```
 ## ⚡ Quick Start (No Python Required!)
 
@@ -133,45 +83,51 @@ omcipcap check examples/omcicheck_example.pcap
 
 omcipcap check with --rtt-threshold argument
 ```bash
-(venv) $omcipcap check --rtt-threshold=1500 omcicheck_example.pcap 
-Analyzing: omcicheck_example.pcap
-
-No.    ID       Action             ME Class     ME Instance  Result                         RTT          Status           ME desc                                 
-------------------------------------------------------------------------------------------------------------------------
-38     19       MIB_UPLOAD_NEXT    241          0x0001                                      0                             Reserved for vendor-specific managed entities
-40     20       MIB_UPLOAD_NEXT    350          0x0001                                      0                             Reserved for vendor-specific use        
-52     26       MIB_UPLOAD_NEXT    500          0x000a                                      0                             Reserved for future standardization     
-58     29       CREATE             84           0x0001       Err: INSTANCE_EXISTS (7)       0.000033                      VLAN tagging filter data                
-59     30       SET                241          0x0001                                      0                             Reserved for vendor-specific managed entities
-60     30       SET                241          0x0001       Err: UNKNOWN_ME (4)            0.000032                      Reserved for vendor-specific managed entities
-64     32       GET                257          0x0000                                      0            [TID_DUPLOCATE]  ONT2-G                                  
-------------------------------------------------------------------------------------------------------------------------
+(venv) $ omcipcap check --rtt-threshold=1500 omcicheck_example.pcap
+ ───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+   No.   ID   Action            ME Class   ME Instance   Result                      RTT   Status            ME desc
+ ───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+   38    19   MIB_UPLOAD_NEXT   241        0x0001                                      0                     Reserved for vendor-specific managed entities
+   40    20   MIB_UPLOAD_NEXT   350        0x0001                                      0                     Reserved for vendor-specific use
+   52    26   MIB_UPLOAD_NEXT   500        0x000a                                      0                     Reserved for future standardization
+   58    29   CREATE            84         0x0001        Err: INSTANCE_EXISTS   0.000033                     VLAN tagging filter data
+   59    30   SET               241        0x0001                                      0                     Reserved for vendor-specific managed entities
+   60    30   SET               241        0x0001        Err: UNKNOWN_ME        0.000033                     Reserved for vendor-specific managed entities
+   64    32   GET               257        0x0000                                      0   [TID_DUPLICATE]   ONT2-G
+ ───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
 Summary: Found 2 failures, 5 Vendor packets, 1 duplicate packets, 0 late packets
+```
+### omcipcap mibdb
+MIB Database Dump
 
+Dump all or filtered MIB instances from a pcap.
+
+```bash
+omcipcap mibdb examples/omci.pcap
+omcipcap mibdb --class-id 84,171 examples/omci.pcap
+omcipcap mibdb --only-upload examples/omci.pcap
 ```
 
-### omcipcap diff
+### omcipcap mibdb-diff
  Analyze two pcap files to identify differences in MIB provisioning
 ```bash
-# Standard comparison
-omcipcap diff examples/mib_vendor_v1.pcap examples/mib_vendor_v2.pcap
-
-# Comparison with Custom Vendor ME definitions
-omcipcap diff examples/mib_vendor_v1.pcap examples/mib_vendor_v2.pcap --mib-json examples/vendor_355.json
+omcipcap mibdb-diff mib_vendor_v1.pcap mib_vendor_v2.pcap
+omcipcap mibdb-diff mib_vendor_v1.pcap mib_vendor_v2.pcap --mib-json examples/vendor_355.json
+omcipcap mibdb-diff --full ont1.pcap ont2.pcap
+omcipcap mibdb-diff --full --class-id=84,171 ont1.pcap ont2.pcap
 ```
 
 Example Output
 When comparing a vendor-specific configuration (Class 355), omcidiff provides a clear view of the state change:
 ```Plaintext
-[*] Successfully loaded 1 custom ME specs.
-[*] Analyzing MIB from examples/mib_vendor_v1.pcap...
-[*] Analyzing MIB from examples/mib_vendor_v2.pcap...
-
-ME (Class, Inst)                    | Attribute                           | Pcap 1                -> Pcap 2
-------------------------------------------------------------------------------------------------------------------------
-[*] Reserved for vendor-specific (355, 0) | CPE mode                            | 'HGU'                -> 'SFU'
-[*] Reserved for vendor-specific (355, 0) | Support VOIP                        | 0x1                  -> 0x0
-------------------------------------------------------------------------------------------------------------------------
+(venv) $ omcipcap mibdb-diff mib_vendor_v1.pcap mib_vendor_v2.pcap --mib-json examples/vendor_355.json
+ ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+   Status         ME Name (ID)                                           Inst   Attribute          Pcap 1     Pcap 2
+ ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+   MODIFIED       Reserved for vendor-specific use (355)                  0x0   CPE mode           HGU        SFU
+   MODIFIED       Reserved for vendor-specific use (355)                  0x0   Support VOIP       0x1        0x0
+ ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+Summary: Added: 0, Removed: 0, Modified: 2
 ```
 
 Advanced: Custom ME JSON Format
@@ -193,21 +149,22 @@ will generate output.html in current directory
 ![PPTP](https://github.com/daneshih1125/omcipcap/blob/master/examples/pptp_graphic.png)
 ![IPHOST](https://github.com/daneshih1125/omcipcap/blob/master/examples/iphost_graphic.png)
 
-### omcipcap vlan_tbl
+### omcipcap vlan-tbl
 ```
 omcipcap vlan_tbl omci.pcap
 ```
 List All ME 171 instances and detail of VLAN table
 ![omcivlan](https://github.com/daneshih1125/omcipcap/blob/master/examples/omcivlan.png)
 
-### omcipcap tcont_flow
+### omcipcap tcont-flow
 ```
-omcipcap tcont_flow examples/single_unit_1_tont_2_gem/single_unit_1_tont_2_gem.pcap
+omcipcap tcont-flow single_unit_1_tont_2_gem.pcap
 ```
 Traces the complete upstream traffic hierarchy from T-CONT → GEM Port → Priority Queue and displays bandwidth/scheduling parameters in a tree view.
 
 Example Output:
 ```plaintext
+(venv) $ omcipcap tcont-flow single_unit_1_tont_2_gem.pcap
 GPON T-CONT Flow Analysis
 ├── T-CONT 32768 (alloc-id=1000)
 │   ├── GEM 1001
@@ -217,6 +174,7 @@ GPON T-CONT Flow Analysis
 │       ├── [US] PQ 32768 → up:CIR=0.128Mbps/PIR=100Mbps
 │       └── [DS] PQ 6 → Priority 6 dn:Unrestricted
 └── T-CONT 32769 (Unassigned)
+(venv) $
 ```
 
 Each T-CONT entry shows:
@@ -225,51 +183,6 @@ Each T-CONT entry shows:
 - **[US] PQ**: Upstream Priority Queue with CIR/PIR bandwidth limits.
 - **[DS] PQ**: Downstream Priority Queue with scheduling priority.
 
-
-## Setup omcipcap on Windows Virtual Environment
-1. Create the Environment
-Open your terminal in the project root directory and run:
-```PowerShell
-python -m venv venv
-```
-
-2. Configure Execution Policy
-By default, Windows restricts running scripts like the activate file. If you see a PSSecurityException error ("scripts is disabled on this system"), run this command to allow local scripts:
-```PowerShell
-Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser
-```
-Select [Y] Yes when prompted. This is a one-time configuration.
-
-3. Activate the Environment
-```PowerShell
-.\venv\Scripts\activate
-```
-
-4. Install Dependencies (Development Mode)
-```PowerShell
-pip install -e .
-```
-
-5. Verify the Tool
-```PowerShell
-(venv) PS C:\Github\omci_utils> omcipcap -h
-usage: omcipcap [-h] {check,diff,graphic,vlan_tbl} ...
-
-OMCI PCAP Diagnostic & Analysis Tool
-
-positional arguments:
-  {check,diff,graphic,vlan_tbl}
-                        Available analysis commands
-    check               Analyze RTT, TID duplicates, and failures
-    diff                Compare MIB snapshots between two pcaps
-    graphic             Generate interactive topology HTML
-    vlan_tbl            Analyze OMCI VLAN tagging logic (Table-driven)
-    tcont_flow          Trace T-CONT -> GEM -> PQ traffic hierarchy
-
-options:
-  -h, --help            show this help message and exit
-```
-
 ## License & Copyright
-**Copyright (c) 2026 Dong Yuan, Shih daneshih1125@gmail.com
+**Copyright (c) 2026 Dong-Yuan Shih <daneshih1125@gmail.com>
 Licensed under the MIT License.**

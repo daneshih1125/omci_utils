@@ -6,7 +6,7 @@ build-backend = "setuptools.build_meta"
 name = "omcipcap"
 dynamic = ["version"]
 readme = "README.md"
-description = "OMCI analysis and MIB diff tools"
+description = "GPON/XGS-PON OMCI Semantic Analysis Framework for ITU-T G.988 protocols"
 requires-python = ">=3.12"
 dependencies = [
     "scapy>=2.5.0",
@@ -14,7 +14,7 @@ dependencies = [
 ]
 license = {text = "MIT"}
 authors = [
-    {name = "Dong Yuan Shih", email = "daneshih1125@gmail.com"}
+    {name = "Dong-Yuan Shih", email = "daneshih1125@gmail.com"}
 ]
 
 [project.urls]
