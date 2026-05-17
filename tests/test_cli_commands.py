@@ -14,7 +14,7 @@ import re
 def setup_test_files():
     # for omcipcap check
     subprocess.run(["python3", "utils/generate_omcicheck_example.py"], check=True)
-    # for omcipcap diff
+    # for omcipcap mibdb-diff
     subprocess.run(["python3", "utils/generate_omcidiff_example.py"], check=True)
     # for omcipcap graphic, vlan-tbl and tcont-flow
     subprocess.run(["python3", "utils/generate_dual_gem_shared_tcont.py"], check=True)
@@ -116,9 +116,9 @@ def test_cmd_check_summary():
     )
 
 
-def test_cmd_diff():
+def test_cmd_mibdb_diff():
     result = subprocess.run(
-        ["omcipcap", "diff", "mib_before.pcap", "mib_after.pcap"],
+        ["omcipcap", "mibdb-diff", "mib_before.pcap", "mib_after.pcap"],
         capture_output=True,
         text=True,
         check=True,
@@ -157,7 +157,7 @@ def test_cmd_diff():
     )
 
     result = subprocess.run(
-        ["omcipcap", "diff", "mib_vendor_v1.pcap", "mib_vendor_v2.pcap"],
+        ["omcipcap", "mibdb-diff", "mib_vendor_v1.pcap", "mib_vendor_v2.pcap"],
         capture_output=True,
         text=True,
         check=True,
@@ -165,7 +165,7 @@ def test_cmd_diff():
 
     pattern = r"MODIFIED\s+Reserved for vendor-specific use\s+\(355\)\s+0x0"
     assert re.search(pattern, result.stdout), (
-        f"\n[Fail] Diff Result not match!\n"
+        f"\n[Fail] mibdb-diff Result not match!\n"
         f"Expected: {pattern}\n"
         f"Actual output: {result.stdout.strip()}"
     )
@@ -173,7 +173,7 @@ def test_cmd_diff():
     result = subprocess.run(
         [
             "omcipcap",
-            "diff",
+            "mibdb-diff",
             "mib_vendor_v1.pcap",
             "mib_vendor_v2.pcap",
             "--mib-json",
@@ -187,7 +187,7 @@ def test_cmd_diff():
     pattern = r"CPE mode\s+HGU\s+SFU"
 
     assert re.search(pattern, result.stdout), (
-        f"\n[Fail] Diff result not correct！\n"
+        f"\n[Fail] mibdb-diff result not correct！\n"
         f"Expected: {pattern}\n"
         f"Actual output: {result.stdout.strip()}"
     )
@@ -195,7 +195,7 @@ def test_cmd_diff():
     pattern = r"Support VOIP\s+0x1\s+0x0"
 
     assert re.search(pattern, result.stdout), (
-        f"\n[Fail] Diff result not correct！\n"
+        f"\n[Fail] mibdb-diff result not correct！\n"
         f"Expected: {pattern}\n"
         f"Actual output: {result.stdout.strip()}"
     )
@@ -203,7 +203,7 @@ def test_cmd_diff():
     result = subprocess.run(
         [
             "omcipcap",
-            "diff",
+            "mibdb-diff",
             "mib_mask_c000.pcap",
             "mib_mask_8000.pcap",
         ],
@@ -215,7 +215,7 @@ def test_cmd_diff():
     pattern = r"MISMATCH\s+Unknown\s+\(355\)"
 
     assert re.search(pattern, result.stdout), (
-        f"\n[Fail] Diff result not correct！\n"
+        f"\n[Fail] mibdb-diff result not correct！\n"
         f"Expected: {pattern}\n"
         f"Actual output: {result.stdout.strip()}"
     )

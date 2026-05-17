@@ -388,14 +388,14 @@ def test_cmd_tcont_flow_json_output():
     )
 
 
-def test_cmd_diff_json_output():
+def test_cmd_mibdb_diff_json_output():
     """
-    Test the 'diff -j' command to ensure it produces a valid and accurate JSON report.
+    Test the 'mibdb-diff -j' command to ensure it produces a valid and accurate JSON report.
     """
     result = subprocess.run(
         [
             "omcipcap",
-            "diff",
+            "mibdb-diff",
             "-j",
             "mib_before.pcap",
             "mib_after.pcap",
@@ -443,16 +443,16 @@ def test_cmd_diff_json_output():
     assert cardholder_rem["status"] == "removed"
 
 
-def test_cmd_diff_vendor_specific_json():
+def test_cmd_mibdb_diff_vendor_specific_json():
     """
-    Test 'diff -j' with vendor-specific MEs (Class 355).
+    Test 'mibdb-diff -j' with vendor-specific MEs (Class 355).
     Verifies that the parser handles unknown MEs using Attribute Masks.
     """
 
     result = subprocess.run(
         [
             "omcipcap",
-            "diff",
+            "mibdb-diff",
             "-j",
             "mib_vendor_v1.pcap",
             "mib_vendor_v2.pcap",
@@ -489,16 +489,16 @@ def test_cmd_diff_vendor_specific_json():
     assert change["new"] == expected_new
 
 
-def test_cmd_diff_multiple_vendor_attributes():
+def test_cmd_mibdb_diff_multiple_vendor_attributes():
     """
-    Test 'diff -j' when a single vendor-specific ME has multiple attribute changes.
+    Test 'mibdb-diff -j' when a single vendor-specific ME has multiple attribute changes.
     Matches the scenario: CPE mode (HGU->SFU) and Support VOIP (0x1->0x0).
     """
 
     result = subprocess.run(
         [
             "omcipcap",
-            "diff",
+            "mibdb-diff",
             "-j",
             "mib_vendor_v1.pcap",
             "mib_vendor_v2.pcap",
@@ -539,9 +539,9 @@ def test_cmd_diff_multiple_vendor_attributes():
     assert cpe_mod["inst_id"] == voip_mod["inst_id"] == 0
 
 
-def test_cmd_diff_mask_mismatch_handling():
+def test_cmd_mibdb_diff_mask_mismatch_handling():
     """
-    Test 'diff -j' when the same Class ID has different attribute masks
+    Test 'mibdb-diff -j' when the same Class ID has mibdb-different attribute masks
     between two PCAPs (e.g., 0xC000 vs 0x8000).
     Verifies that the mismatch is caught and reported correctly.
     """
@@ -549,7 +549,7 @@ def test_cmd_diff_mask_mismatch_handling():
     result = subprocess.run(
         [
             "omcipcap",
-            "diff",
+            "mibdb-diff",
             "-j",
             "mib_mask_c000.pcap",
             "mib_mask_8000.pcap",

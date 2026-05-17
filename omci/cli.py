@@ -54,9 +54,28 @@ def run_omcicheck(
         render_check_table(check_result)
 
 
-def run_omcidiff(pcap1, pcap2, json_output=False):
-    mib1 = omciparser.get_mib_snapshot(pcap1)
-    mib2 = omciparser.get_mib_snapshot(pcap2)
+def run_omcidiff(pcap1, pcap2, full_diff=False, class_id_str=None, json_output=False):
+    class_ids = None
+    if full_diff:
+        mib1 = omciparser.get_all_mib_db(pcap1)
+        mib2 = omciparser.get_all_mib_db(pcap2)
+    else:
+        mib1 = omciparser.get_mib_snapshot(pcap1)
+        mib2 = omciparser.get_mib_snapshot(pcap2)
+
+    if class_id_str:
+        try:
+            class_ids = [int(c.strip()) for c in class_id_str.split(",")]
+        except ValueError:
+            print(
+                "[!] Error: Class ID must be numbers separated by commas (e.g. 84,171)"
+            )
+            return
+
+    filter_set = set(class_ids) if class_ids else None
+    if filter_set:
+        mib1 = {k: v for k, v in mib1.items() if k[0] in filter_set}
+        mib2 = {k: v for k, v in mib2.items() if k[0] in filter_set}
 
     diff_data = omciparser.get_mib_diff_data(mib1, mib2)
 
@@ -129,6 +148,17 @@ def main():
     subparsers = parser.add_subparsers(
         dest="command", help="Available analysis commands"
     )
+    # --- Sub-command: check ---
+    check_p = subparsers.add_parser(
+        "check", parents=[common_args], help="Analyze RTT, TID duplicates, and failures"
+    )
+    check_p.add_argument("pcap", help="Path to pcap file")
+    check_p.add_argument(
+        "--rtt-threshold", type=float, default=1000.0, help="RTT threshold in ms"
+    )
+    check_p.add_argument("--only-vendor", action="store_true")
+    check_p.add_argument("--only-failed", action="store_true")
+
     # --- Sub-command: mibdb ---
     mibdb_p = subparsers.add_parser(
         "mibdb", parents=[common_args], help="Dump MIB database"
@@ -141,23 +171,25 @@ def main():
         type=str,
     )
 
-    # --- Sub-command: check ---
-    check_p = subparsers.add_parser(
-        "check", parents=[common_args], help="Analyze RTT, TID duplicates, and failures"
-    )
-    check_p.add_argument("pcap", help="Path to pcap file")
-    check_p.add_argument(
-        "--rtt-threshold", type=float, default=1000.0, help="RTT threshold in ms"
-    )
-    check_p.add_argument("--only-vendor", action="store_true")
-    check_p.add_argument("--only-failed", action="store_true")
-
     # --- Sub-command: diff ---
     diff_p = subparsers.add_parser(
-        "diff", parents=[common_args], help="Compare MIB snapshots between two pcaps"
+        "mibdb-diff",
+        parents=[common_args],
+        help="Compare MIB snapshots between two pcaps (only compare MIB upload MIBs by default)",
     )
     diff_p.add_argument("pcap1", help="Baseline pcap")
     diff_p.add_argument("pcap2", help="Target pcap")
+    diff_p.add_argument(
+        "--full",
+        action="store_true",
+        help="Compare the full MIB lifecycle (including OLT provisioning). "
+        "If not set, only the initial MIB upload (Hardware Snapshot) is compared.",
+    )
+    diff_p.add_argument(
+        "--class-id",
+        help="Filter by ME class IDs (comma-separated, e.g., 84,171)",
+        type=str,
+    )
     diff_p.add_argument("--mib-json", help="Custom ME JSON definition")
 
     # --- Sub-command: graphic ---
@@ -184,11 +216,7 @@ def main():
 
     args = parser.parse_args()
 
-    if args.command == "mibdb":
-        run_mibdb(
-            args.pcap, args.only_upload, args.class_id, json_output=args.json_output
-        )
-    elif args.command == "check":
+    if args.command == "check":
         run_omcicheck(
             args.pcap,
             args.only_vendor,
@@ -196,10 +224,20 @@ def main():
             args.rtt_threshold,
             json_output=args.json_output,
         )
-    elif args.command == "diff":
+    elif args.command == "mibdb":
+        run_mibdb(
+            args.pcap, args.only_upload, args.class_id, json_output=args.json_output
+        )
+    elif args.command == "mibdb-diff":
         if args.mib_json:
             load_mib_json(args.mib_json)
-        run_omcidiff(args.pcap1, args.pcap2, json_output=args.json_output)
+        run_omcidiff(
+            args.pcap1,
+            args.pcap2,
+            args.full,
+            args.class_id,
+            json_output=args.json_output,
+        )
     elif args.command == "graphic":
         run_omcigraph(args.pcap)
     elif args.command == "vlan-tbl":

@@ -493,8 +493,8 @@ def get_mib_diff_data(mib1, mib2):
             for attr, val1 in obj1.attributes.items():
                 val2 = obj2.attributes.get(attr)
                 if val1 != val2:
-                    v1_str = f"0x{val1:x}" if isinstance(val1, int) else f"{val1}"
-                    v2_str = f"0x{val2:x}" if isinstance(val2, int) else f"{val2}"
+                    v1_str = obj1.attr_semantic(attr)
+                    v2_str = obj2.attr_semantic(attr)
                     diff_data["changes"].append(
                         {
                             "status": "modified",
