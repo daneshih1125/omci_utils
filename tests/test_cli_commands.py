@@ -226,7 +226,7 @@ def test_cmd_graphic():
     pcap_file = "single_unit_1_tont_2_gem.pcap"
     output_file = "output.html"
 
-    subprocess.run(["omcipcap", "graphic", pcap_file], check=True)
+    subprocess.run(["omcipcap", "graphic", pcap_file, "-o", "output.html"], check=True)
 
     assert os.path.exists(output_file), "{output_file} not exist"
 

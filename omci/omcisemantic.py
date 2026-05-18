@@ -5,7 +5,7 @@
 # Licensed under the MIT License.
 
 
-class OMCI_Semantic:
+class OMCISemantic:
     """
     A dynamic registry to hold semantic translation functions for OMCI attributes.
     This avoids modifying the rigid ME_SPEC structure.
@@ -132,7 +132,32 @@ def decode_me84_vlan_filter_list(val):
     return ",".join(vlan_entries) if vlan_entries else "Empty/All-Pass"
 
 
-OMCI_Semantic.register(47, "TP type", me47_tp_type_translator)
-OMCI_Semantic.register(171, "Association type", me171_assoc_type_translator)
-OMCI_Semantic.register(171, "Downstream mode", me171_downstream_mode_translator)
-OMCI_Semantic.register(84, "VLAN filter list", decode_me84_vlan_filter_list)
+def get_attr_semantic(class_id, attr_name, value):
+    """
+    Get the human-readable semantic meaning of an attribute value.
+
+    Args:
+        class_id (int): The OMCI Class ID.
+        attr_name (str): The attribute name.
+        value: The raw attribute value to be translated.
+
+    Returns:
+        str: The translated semantic string, or the raw value as string
+             if no translator is found.
+    """
+    try:
+        # Get the translator function for specific class and attribute
+        trans_func = OMCISemantic.translator(class_id, attr_name)
+        if trans_func:
+            return trans_func(value)
+    except (KeyError, AttributeError):
+        # Fallback to raw value if translation logic is missing
+        pass
+
+    return str(value)
+
+
+OMCISemantic.register(47, "TP type", me47_tp_type_translator)
+OMCISemantic.register(171, "Association type", me171_assoc_type_translator)
+OMCISemantic.register(171, "Downstream mode", me171_downstream_mode_translator)
+OMCISemantic.register(84, "VLAN filter list", decode_me84_vlan_filter_list)

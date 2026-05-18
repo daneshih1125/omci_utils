@@ -87,11 +87,21 @@ def run_omcidiff(pcap1, pcap2, full_diff=False, class_id_str=None, json_output=F
         render_diff_table(diff_data)
 
 
-def run_omcigraph(pcap):
-    mib_db = omciparser.get_all_mib_db(pcap)
-    html_content = omcigrapher.export_to_html(mib_db)
-    with open("output.html", "w", encoding="utf-8") as f:
+def run_omcitopo(pcap, output_html=None, json_output=False):
+    topo_data = omciparser.get_topology_data(pcap)
+
+    if json_output:
+        print(json.dumps(topo_data, indent=4))
+        return
+
+    if not output_html:
+        base_name = os.path.splitext(pcap)[0]
+        output_html = f"{base_name}.html"
+
+    html_content = omcigrapher.export_to_html(topo_data)
+    with open(output_html, "w", encoding="utf-8") as f:
         f.write(html_content)
+    print(f"[+] Topology visualization saved to: {output_html}")
 
 
 def run_omcivlan(pcap, json_output=False):
@@ -192,11 +202,20 @@ def main():
     )
     diff_p.add_argument("--mib-json", help="Custom ME JSON definition")
 
-    # --- Sub-command: graphic ---
-    graph_p = subparsers.add_parser(
-        "graphic", help="Generate interactive topology HTML"
+    # --- Sub-command: topology (formerly graphic) ---
+    topo_p = subparsers.add_parser(
+        "topology",
+        aliases=["graphic"],
+        parents=[common_args],
+        help="Visualize and export ONT internal logical connection topology",
     )
-    graph_p.add_argument("pcap", help="Path to pcap file")
+    topo_p.add_argument("pcap", help="Path to pcap file")
+    topo_p.add_argument(
+        "-o",
+        "--output-html",
+        help="Output HTML file path (default: <pcap_name>.html)",
+        default=None,
+    )
 
     # --- Sub-command: vlan_tbl ---
     vlan_p = subparsers.add_parser(
@@ -238,8 +257,8 @@ def main():
             args.class_id,
             json_output=args.json_output,
         )
-    elif args.command == "graphic":
-        run_omcigraph(args.pcap)
+    elif args.command in ["topology", "graphic"]:
+        run_omcitopo(args.pcap, args.output_html, json_output=args.json_output)
     elif args.command == "vlan-tbl":
         run_omcivlan(args.pcap, json_output=args.json_output)
     elif args.command == "tcont-flow":

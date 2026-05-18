@@ -6,7 +6,7 @@
 
 import struct
 from enum import IntEnum
-from omci.omcisemantic import OMCI_Semantic
+from omci.omcisemantic import OMCISemantic
 
 
 class OMCIClass(IntEnum):
@@ -1852,7 +1852,7 @@ class MIBInstance:
         if val is None:
             return "N/A"
 
-        translator = OMCI_Semantic.translator(self.class_id, attr_name)
+        translator = OMCISemantic.translator(self.class_id, attr_name)
         if translator:
             try:
                 return translator(val)

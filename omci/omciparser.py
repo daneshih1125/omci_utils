@@ -10,6 +10,7 @@ from omci import omcimib
 from omci import omciflow
 from omci import omcivlan
 from omci.omci import OMCIBaseline, OMCIPacket, OmciAction, OmciResult
+from omci.omcimib import OMCIClass
 
 
 def get_omci_pkts(pcap_path, include_raw=False):
@@ -516,6 +517,202 @@ def get_mib_diff_data(mib1, mib2):
     }
 
     return diff_data
+
+
+INTERESTED_CLASSES = {
+    OMCIClass.PPTP_ETHERNET_UNI,  # 11
+    OMCIClass.VIRTUAL_ETHERNET_INTERFACE_POINT,  # 329
+    OMCIClass.IP_HOST_CONFIG_DATA,  # 134
+    OMCIClass.MAC_BRIDGE_SERVICE_PROFILE,  # 45
+    OMCIClass.MAC_BRIDGE_CONFIGURATION_DATA,  # 46
+    OMCIClass.MAC_BRIDGE_PORT_CONFIGURATION_DATA,  # 47
+    OMCIClass.VLAN_TAGGING_FILTER_DATA,  # 84
+    OMCIClass.DOT1P_MAPPER_SERVICE_PROFILE,  # 130
+    OMCIClass.EXTENDED_VLAN_TAGGING_OPERATION_CONFIGURATION_DATA,  # 171
+    OMCIClass.T_CONT,  # 262
+    OMCIClass.GEM_INTERWORKING_TERMINATION_POINT,  # 266
+    OMCIClass.GEM_PORT_NETWORK_CTP,  # 268
+    OMCIClass.MULTICAST_GEM_INTERWORKING_TERMINATION_POINT,  # 281
+}
+
+
+def get_topology_data(pcap_path):
+    """
+    High-level entry point to extract topology from a pcap file.
+
+    Args:
+        pcap_path (str): Path to the input pcap file.
+
+    Returns:
+        dict: The abstract topology data containing 'nodes' and 'edges'.
+    """
+    # Assume get_all_mib_db is imported or defined to parse pcap into MIB DB
+    mib_db = get_all_mib_db(pcap_path)
+    return generate_topo_data(mib_db)
+
+
+def generate_topo_data(mib_db):
+    """
+    Extract logical topology relationships from the MIB database.
+
+    Args:
+        mib_db (dict): A dictionary mapping (class_id, inst_id) to
+                       ME instances with decoded semantic attributes.
+
+    Returns:
+        dict: A dictionary containing:
+            - 'nodes' (list): Minimalist node definitions with attributes.
+            - 'edges' (list): Logical links between MEs using source/target IDs.
+    """
+    nodes = []
+    edges = []
+
+    def node_str(cid, iid):
+        # Helper to ensure consistent ID format: class_id_inst_id
+        return f"{cid}_{iid}"
+
+    for (class_id, inst_id), me_inst in mib_db.items():
+        if class_id not in INTERESTED_CLASSES:
+            continue
+
+        attrs = me_inst.attributes
+        if class_id == OMCIClass.T_CONT:
+            alloc_id = attrs.get("Alloc-ID")
+            if alloc_id is None or alloc_id == 0xFFFF or alloc_id == 0xFF:
+                continue
+
+        # ID format: {class_id}_{inst_id} (e.g., 262_1)
+        node_id = f"{class_id}_{inst_id}"
+
+        # Semantic attributes without visual formatting
+        attrs = me_inst.attributes
+
+        nodes.append(
+            {
+                "id": node_id,
+                "class_id": int(class_id),
+                "inst_id": int(inst_id),
+                "attributes": attrs,
+                "name": OMCIClass(class_id).name,
+            }
+        )
+
+        # ME 84: VLAN Tagging Filter Data (Implicit match to ME 47)
+        if class_id == OMCIClass.VLAN_TAGGING_FILTER_DATA:
+            if (47, inst_id) in mib_db:
+                edges.append(
+                    {
+                        "source": node_id,
+                        "target": node_str(47, inst_id),
+                        "relation": "vlan_filter_bind_to_port",
+                        "label": "Filter-on",
+                    }
+                )
+
+        # ME 47: MAC Bridge Port Configuration Data
+        elif class_id == OMCIClass.MAC_BRIDGE_PORT_CONFIGURATION_DATA:
+            # Bridge ID Pointer (Connects to ME 45)
+            b_ptr = attrs.get("Bridge id pointer")
+            if b_ptr is not None:
+                edges.append(
+                    {
+                        "source": node_id,
+                        "target": node_str(45, b_ptr),
+                        "relation": "belongs_to_bridge",
+                        "label": "bridge_ptr",
+                    }
+                )
+
+            # TP Pointer (Connects to various Physical/Termination points)
+            tp_ptr = attrs.get("TP pointer")
+            if tp_ptr is not None:
+                # 11: PPTP, 130: 802.1p, 134: IP Host, 329: VEIP, 281: MCAST
+                for t_cid in [11, 130, 134, 329, 281]:
+                    if (t_cid, tp_ptr) in mib_db:
+                        edges.append(
+                            {
+                                "source": node_id,
+                                "target": node_str(t_cid, tp_ptr),
+                                "relation": "points_to_transport_termination",
+                                "label": "tp_ptr",
+                            }
+                        )
+
+        # ME 171: Extended VLAN Tagging Operation
+        elif class_id == OMCIClass.EXTENDED_VLAN_TAGGING_OPERATION_CONFIGURATION_DATA:
+            a_ptr = attrs.get("Associated ME pointer")
+            if a_ptr:
+                for t_cid in [47, 11, 329, 130, 134]:
+                    if (t_cid, a_ptr) in mib_db:
+                        edges.append(
+                            {
+                                "source": node_id,
+                                "target": node_str(t_cid, a_ptr),
+                                "relation": "vlan_op_associated_with_me",
+                                "label": "assoc_ptr",
+                            }
+                        )
+
+        # ME 266: GEM Interworking Termination Point
+        elif class_id == OMCIClass.GEM_INTERWORKING_TERMINATION_POINT:
+            # Interworking TP pointer -> Bridge Port (47)
+            iw_ptr = attrs.get("Interworking TP pointer")
+            if iw_ptr:
+                edges.append(
+                    {
+                        "source": node_id,
+                        "target": node_str(47, iw_ptr),
+                        "relation": "iw_mapped_to_bridge_port",
+                        "label": "iw_tp",
+                    }
+                )
+
+            # GEM port network CTP pointer -> GEM CTP (268)
+            gem_ptr = attrs.get("GEM port network CTP pointer")
+            if gem_ptr:
+                edges.append(
+                    {
+                        "source": node_id,
+                        "target": node_str(268, gem_ptr),
+                        "relation": "iw_linked_to_gem_port",
+                        "label": "gem_ptr",
+                    }
+                )
+
+            # Service Profile Pointer based on Interworking Option
+            iw_option = attrs.get("Interworking option")
+            srv_ptr = attrs.get("Service profile pointer")
+            if srv_ptr:
+                target_cid = None
+                if iw_option == 1:
+                    target_cid = 45  # MAC Bridge Service Profile
+                elif iw_option == 5:
+                    target_cid = 130  # 802.1p Mapper Service Profile
+
+                if target_cid:
+                    edges.append(
+                        {
+                            "source": node_id,
+                            "target": node_str(target_cid, srv_ptr),
+                            "relation": "service_profile_mapping",
+                            "label": "srv_ptr",
+                        }
+                    )
+
+        # ME 268: GEM Port Network CTP
+        elif class_id == OMCIClass.GEM_PORT_NETWORK_CTP:
+            t_ptr = attrs.get("T-CONT pointer")
+            if t_ptr:
+                edges.append(
+                    {
+                        "source": node_id,
+                        "target": node_str(262, t_ptr),
+                        "relation": "traffic_mapped_to_tcont",
+                        "label": "tcont_ptr",
+                    }
+                )
+
+    return {"nodes": nodes, "edges": edges}
 
 
 def get_instances_by_class(mib_db, target_class_id):
