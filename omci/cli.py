@@ -180,6 +180,7 @@ def main():
         help="Filter by ME class IDs (comma-separated, e.g., 84,171)",
         type=str,
     )
+    mibdb_p.add_argument("--mib-json", help="Custom ME JSON definition")
 
     # --- Sub-command: diff ---
     diff_p = subparsers.add_parser(
@@ -245,6 +246,8 @@ def main():
             json_output=args.json_output,
         )
     elif args.command == "mibdb":
+        if args.mib_json:
+            load_mib_json(args.mib_json)
         run_mibdb(
             args.pcap, args.only_upload, args.class_id, json_output=args.json_output
         )
