@@ -30,7 +30,7 @@ The **Master** branch represents the latest evolution, shifting from a standalon
 | `mibdb-diff` | Compare two MIBs with semantic decoding | Table / JSON |
 | `vlan-tbl` | Analyze OMCI VLAN tagging logic (Table-driven) | Table / JSON |
 | `tcont-flow` | Trace T-CONT → GEM → PQ traffic hierarchy | Table / JSON |
-| `graphic` | Generate interactive topology HTML | Interactive HTML |
+| `topology (graphic)` | Generate interactive topology HTML | Interactive HTML / JSON |
 
 
 
@@ -142,11 +142,10 @@ To define your own Vendor MEs for the --mib-json flag, use the following structu
 }
 ```
 
-### omcipcap graphic
+### omcipcap topology 
 ```
-omcipcap graphic omci.pcap
+omcipcap topology omci.pcap -o example.html
 ```
-will generate output.html in current directory
 ![PPTP](https://github.com/daneshih1125/omcipcap/blob/master/examples/pptp_graphic.png)
 ![IPHOST](https://github.com/daneshih1125/omcipcap/blob/master/examples/iphost_graphic.png)
 
