@@ -6,6 +6,9 @@
 
 import struct
 import socket
+import importlib.util
+import os
+import sys
 
 
 class OMCISemantic:
@@ -26,6 +29,27 @@ class OMCISemantic:
     def translator(cls, class_id, attr_name):
         """Retrieve a translator for a specific attribute."""
         return cls._registry.get((class_id, attr_name))
+
+
+def load_external_semantics(semantic_dir):
+    """
+    Dynamically load all Python files in the directory to trigger
+    OMCISemantic.register() calls.
+    """
+    if not os.path.isdir(semantic_dir):
+        return
+
+    # Add dir to sys.path so scripts can import each other if needed
+    sys.path.append(semantic_dir)
+
+    for filename in os.listdir(semantic_dir):
+        if filename.endswith(".py") and not filename.startswith("__"):
+            file_path = os.path.join(semantic_dir, filename)
+            module_name = f"ext_semantic_{filename[:-3]}"
+
+            spec = importlib.util.spec_from_file_location(module_name, file_path)
+            module = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(module)
 
 
 ME_47_TP_TYPE = {

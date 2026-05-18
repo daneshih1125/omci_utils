@@ -9,6 +9,7 @@ import os
 from omci import omcimib
 from omci import omcigrapher
 from omci import omciparser
+from omci import omcisemantic
 import argparse
 import json
 
@@ -181,6 +182,7 @@ def main():
         type=str,
     )
     mibdb_p.add_argument("--mib-json", help="Custom ME JSON definition")
+    mibdb_p.add_argument("--semantic-dir", help="ME attributes semantic extension dir")
 
     # --- Sub-command: diff ---
     diff_p = subparsers.add_parser(
@@ -203,6 +205,7 @@ def main():
         type=str,
     )
     diff_p.add_argument("--mib-json", help="Custom ME JSON definition")
+    diff_p.add_argument("--semantic-dir", help="ME attributes semantic extension dir")
 
     # --- Sub-command: topology (formerly graphic) ---
     topo_p = subparsers.add_parser(
@@ -248,6 +251,8 @@ def main():
     elif args.command == "mibdb":
         if args.mib_json:
             load_mib_json(args.mib_json)
+        if args.semantic_dir:
+            omcisemantic.load_external_semantics(args.semantic_dir)
         run_mibdb(
             args.pcap, args.only_upload, args.class_id, json_output=args.json_output
         )
